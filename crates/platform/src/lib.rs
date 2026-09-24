@@ -1,0 +1,212 @@
+//! Credential persistence and temporary owner-operated login/verification surfaces.
+pub mod badge;
+pub mod captcha;
+pub mod game_activity;
+pub mod hotkeys;
+pub mod notifications;
+pub mod pointer;
+pub mod processes;
+pub mod save;
+pub mod startup;
+pub mod tray;
+pub mod video;
+pub mod window_effects;
+use client_core::auth::{Failure, SessionSecret};
+pub use pointer::cursor_position;
+use std::{
+	sync::{
+		Arc,
+		mpsc::{self, Receiver},
+	},
+	time::{Duration, Instant},
+};
+use wry::{WebView, WebViewBuilder};
+
+/// Logical height of the native header the desktop app draws above the login webview.
+pub const LOGIN_HEADER_HEIGHT: f32 = 56.0;
+const SERVICE: &str = "cz.viceverse.corrode";
+/// Pre-rebrand credential service. Read once as a fallback so a fork keeps
+/// existing OS-keychain logins; all new writes go to [`SERVICE`].
+const LEGACY_SERVICE: &str = "cz.viceverse.serein";
+const ACCOUNT: &str = "discord-session";
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CredentialError {
+	Unavailable,
+	Invalid,
+	TimedOut,
+}
+
+/// The entry restored on launch. Switching accounts rewrites it from the per-account entry.
+pub fn load_session() -> Result<Option<SessionSecret>, CredentialError> {
+	load_entry(ACCOUNT)
+}
+pub fn save_session(secret: &SessionSecret) -> Result<(), CredentialError> {
+	save_entry(ACCOUNT, secret)
+}
+pub fn forget_session() -> Result<(), CredentialError> {
+	forget_entry(ACCOUNT)
+}
+/// One entry per remembered account, so the switcher never keeps a second copy in memory.
+fn account_entry(account: model::Id) -> String {
+	format!("{ACCOUNT}.{account}")
+}
+pub fn load_account_session(account: model::Id) -> Result<Option<SessionSecret>, CredentialError> {
+	load_entry(&account_entry(account))
+}
+pub fn save_account_session(
+	account: model::Id,
+	secret: &SessionSecret,
+) -> Result<(), CredentialError> {
+	save_entry(&account_entry(account), secret)
+}
+pub fn forget_account_session(account: model::Id) -> Result<(), CredentialError> {
+	forget_entry(&account_entry(account))
+}
+fn load_entry(name: &str) -> Result<Option<SessionSecret>, CredentialError> {
+	match read_service_entry(SERVICE, name)? {
+		Some(secret) => Ok(Some(secret)),
+		// Fall back to the pre-rebrand service once; a successful save
+		// later migrates the secret to the new service.
+		None => read_service_entry(LEGACY_SERVICE, name),
+	}
+}
+fn read_service_entry(
+	service: &str,
+	name: &str,
+) -> Result<Option<SessionSecret>, CredentialError> {
+	let entry = keyring::Entry::new(service, name).map_err(|_| CredentialError::Unavailable)?;
+	match entry.get_password() {
+		Ok(value) => SessionSecret::from_owner_input(value)
+			.map(Some)
+			.map_err(|_| CredentialError::Invalid),
+		Err(keyring::Error::NoEntry) => Ok(None),
+		Err(_) => Err(CredentialError::Unavailable),
+	}
+}
+fn save_entry(name: &str, secret: &SessionSecret) -> Result<(), CredentialError> {
+	keyring::Entry::new(SERVICE, name)
+		.and_then(|entry| entry.set_password(secret.expose()))
+		.map_err(|_| CredentialError::Unavailable)
+}
+fn forget_entry(name: &str) -> Result<(), CredentialError> {
+	for service in [SERVICE, LEGACY_SERVICE] {
+		match keyring::Entry::new(service, name).and_then(|entry| entry.delete_credential()) {
+			Ok(()) | Err(keyring::Error::NoEntry) => {}
+			Err(_) => return Err(CredentialError::Unavailable),
+		}
+	}
+	Ok(())
+}
+fn discord_origin(value: &str) -> bool {
+	url::Url::parse(value).is_ok_and(|url| {
+		url.scheme() == "https"
+			&& url.host_str() == Some("discord.com")
+			&& url.port_or_known_default() == Some(443)
+			&& url.username().is_empty()
+			&& url.password().is_none()
+	})
+}
+fn login_navigation(value: &str) -> bool {
+	discord_origin(value) || captcha::hcaptcha_origin(value)
+}
+/// Receives only the account token used by THIS ephemeral, owner-operated login page.
+/// No browser-profile reads, password interception, console instructions, or QR exchange implementation.
+pub struct LoginView {
+	view: WebView,
+	tokens: Receiver<SessionSecret>,
+	opened: Instant,
+}
+impl LoginView {
+	pub fn open(
+		parent: Arc<winit::window::Window>,
+		wake: impl Fn() + Send + Sync + 'static,
+	) -> Result<Self, Failure> {
+		let (send, tokens) = mpsc::sync_channel(1);
+		let mut random = [0_u8; 32];
+		getrandom::fill(&mut random).map_err(|_| Failure::Protocol)?;
+		let capability = random
+			.iter()
+			.map(|byte| format!("{byte:02x}"))
+			.collect::<String>()
+			+ ":";
+		let script =
+			include_str!("login-handoff.js").replace("__CORRODE_LOGIN_CAPABILITY__", &capability);
+		let builder = WebViewBuilder::new()
+			.with_url("https://discord.com/login")
+			.with_incognito(true)
+			.with_devtools(false)
+			.with_initialization_script_for_main_only(script, true)
+			.with_navigation_handler(|url| login_navigation(&url))
+			.with_new_window_req_handler(|_, _| wry::NewWindowResponse::Deny)
+			.with_download_started_handler(|_, _| false)
+			.with_ipc_handler(move |request| {
+				if !discord_origin(&request.uri().to_string()) || request.body().len() > 2113 {
+					return;
+				}
+				let body = zeroize::Zeroizing::new(request.into_body());
+				let Some(value) = body.strip_prefix(&capability) else {
+					return;
+				};
+				if let Ok(secret) = SessionSecret::from_owner_input(value.to_owned()) {
+					let _ = send.try_send(secret);
+					wake();
+				}
+			});
+		let view = builder
+			.with_bounds(bounds(&parent))
+			.build_as_child(parent.as_ref())
+			.map_err(|_| Failure::Protocol)?;
+		Ok(Self {
+			view,
+			tokens,
+			opened: Instant::now(),
+		})
+	}
+	pub fn token(&self) -> Option<SessionSecret> {
+		self.tokens.try_recv().ok()
+	}
+	pub fn expired(&self) -> bool {
+		self.opened.elapsed() > Duration::from_secs(600)
+	}
+	pub fn crashed(&self) -> bool {
+		false
+	}
+	pub fn resize(&self, parent: &winit::window::Window) {
+		let _ = self.view.set_bounds(bounds(parent));
+	}
+	pub fn pump(&self) {}
+}
+fn bounds(parent: &winit::window::Window) -> wry::Rect {
+	let size = parent.inner_size();
+	let header = (LOGIN_HEADER_HEIGHT as f64 * parent.scale_factor()).round() as u32;
+	wry::Rect {
+		position: wry::dpi::PhysicalPosition::new(0, header as i32).into(),
+		size: wry::dpi::PhysicalSize::new(size.width, size.height.saturating_sub(header)).into(),
+	}
+}
+#[cfg(test)]
+mod tests {
+	use super::*;
+	#[test]
+	fn handoff_accepts_only_our_discord_origin() {
+		assert!(discord_origin("https://discord.com/login"));
+		for value in [
+			"http://discord.com",
+			"https://discord.com.evil.test",
+			"https://evil.test/discord.com",
+			"https://user@discord.com",
+			"https://discord.com:444",
+		] {
+			assert!(!discord_origin(value));
+		}
+		let script = include_str!("login-handoff.js");
+		assert!(!script.contains("localStorage"));
+		assert!(!script.contains("password"));
+	}
+	#[test]
+	fn login_allows_hcaptcha_frames_only_over_https() {
+		assert!(login_navigation("https://newassets.hcaptcha.com/captcha/"));
+		assert!(!login_navigation("http://hcaptcha.com/"));
+		assert!(!login_navigation("https://hcaptcha.com.evil.test/"));
+	}
+}

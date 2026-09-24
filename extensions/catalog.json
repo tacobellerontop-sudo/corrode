@@ -1,0 +1,27 @@
+{
+  "api_version": 1,
+  "entries": [
+    {
+      "manifest": {
+        "api_version": 1,
+        "id": "corrode-ocean",
+        "name": "Ocean",
+        "version": "1.0.0",
+        "author": "Corrode contributors",
+        "license": "MIT OR Apache-2.0",
+        "source": "https://github.com/ViceVerse-cz/rustcord",
+        "kind": "theme"
+      },
+      "release_url": "https://raw.githubusercontent.com/ViceVerse-cz/rustcord/cb637f07ea9ff643325533820fd1ba052a00176d/extensions/ocean.corrode-extension",
+      "sha256": "0bd2ad29c5935e5e6d3afcceb4fe5940df412bb50824f8ba7f066fb08711acdd",
+      "download_bytes": 962,
+      "source_commit": "cb637f07ea9ff643325533820fd1ba052a00176d",
+      "description": "Deep navy surfaces and cool ocean accents for calmer conversations.",
+      "preview": {
+        "url": "https://raw.githubusercontent.com/ViceVerse-cz/Corrode/c52e1e9c3d454ecacc867cc298dad53d9efa2759/extensions/previews/ocean.png",
+        "sha256": "7fd9532d983c52ec9f86a345d23e2c6822597ca29a34833958be816e0bcc1913",
+        "download_bytes": 85376
+      }
+    }
+  ]
+}

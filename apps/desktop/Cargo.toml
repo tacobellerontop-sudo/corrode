@@ -1,0 +1,60 @@
+[package]
+name = "corrode"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[features]
+default = []
+# No-op: token sign-in used to require this flag; it is now always built in.
+# Kept only so `--features developer-session` in older scripts keeps building.
+developer-session = []
+demo = ["dep:test-support", "ui/demo"]
+
+[dependencies]
+extensions.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+discord-voice.workspace = true
+eframe.workspace = true
+ui.workspace = true
+model.workspace = true
+client-core.workspace = true
+discord-api.workspace = true
+discord-gateway.workspace = true
+discord-protocol.workspace = true
+test-support = { workspace = true, optional = true }
+tokio.workspace = true
+tokio-tungstenite.workspace = true
+futures-util.workspace = true
+zeroize.workspace = true
+platform.workspace = true
+local-store.workspace = true
+winit.workspace = true
+reqwest.workspace = true
+rasterlottie.workspace = true
+dirs.workspace = true
+getrandom.workspace = true
+url.workspace = true
+sha2 = "=0.10.9"
+zip = { version = "=4.6.1", default-features = false, features = ["deflate-flate2"] }
+cpal = { version = "=0.18.2", default-features = false }
+rtrb = "=0.4.0"
+symphonia = { version = "=0.6.1", default-features = false, features = ["mp3", "pcm", "wav", "ogg", "vorbis"] }
+opus2 = { version = "=0.4.0", default-features = false, features = ["backend-libopus", "static", "bundled"] }
+image = { version = "=0.25.10", default-features = false, features = ["png", "jpeg", "gif", "webp"] }
+png = "=0.18.1"
+arboard = "=3.6.1"
+
+[build-dependencies]
+find-msvc-tools = "=0.1.12"
+
+[dev-dependencies]
+test-support.workspace = true
+
+[[example]]
+name = "profile_preview"
+required-features = ["demo"]
+
+[lints]
+workspace = true
