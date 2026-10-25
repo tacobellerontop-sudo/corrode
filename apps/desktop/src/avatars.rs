@@ -18,6 +18,20 @@ use std::{
 };
 use tokio::sync::{mpsc as async_mpsc, watch};
 
+/// Longest edge decoded for in-timeline media and for the larger viewer rendition.
+pub const EMBED_EDGE: u32 = 512;
+pub const LARGE_EDGE: u32 = 2048;
+/// Decoded animation frames with their display durations.
+pub type GifFrames = Vec<(Duration, Arc<egui::ColorImage>)>;
+
+/// Scale `width`×`height` so its longest edge is at most `edge`, never upscaling.
+pub fn fit_edge(width: u32, height: u32, edge: u32) -> (u32, u32) {
+	let longest = u64::from(width.max(height)).max(u64::from(edge));
+	(
+		(u64::from(width) * u64::from(edge) / longest).max(1) as u32,
+		(u64::from(height) * u64::from(edge) / longest).max(1) as u32,
+	)
+}
 const MAX_ENCODED: usize = 2 * 1024 * 1024;
 const MAX_ANIMATED_ENCODED: usize = 16 * 1024 * 1024;
 const MAX_LARGE_ENCODED: usize = 16 * 1024 * 1024;
@@ -63,7 +77,7 @@ fn lottie_key(key: &str) -> bool {
 /// Decode budget for one key: the longest edge kept in memory.
 fn decode_edge(key: &str) -> u32 {
 	if key.starts_with("large:") {
-		ui::LARGE_EDGE
+		LARGE_EDGE
 	} else if key.starts_with("anim:")
 		|| key.starts_with("embed:")
 		|| key.starts_with("gif:")
@@ -71,7 +85,7 @@ fn decode_edge(key: &str) -> u32 {
 		|| key.starts_with("banner-")
 		|| key.starts_with("member-banner-")
 	{
-		ui::EMBED_EDGE
+		EMBED_EDGE
 	} else {
 		128
 	}
@@ -88,7 +102,7 @@ pub type Cleanup = mpsc::Receiver<Result<(), &'static str>>;
 pub struct AvatarResult {
 	pub key: String,
 	pub image: Option<egui::ColorImage>,
-	pub frames: ui::GifFrames,
+	pub frames: GifFrames,
 	pub error: Option<&'static str>,
 }
 
@@ -332,7 +346,7 @@ fn cdn_url(key: &str) -> Option<String> {
 		{
 			return Some(source.to_owned());
 		}
-		let mut url = url::Url::parse(&embed_url(source, ui::EMBED_EDGE)?).ok()?;
+		let mut url = url::Url::parse(&embed_url(source, EMBED_EDGE)?).ok()?;
 		let query: Vec<_> = url
 			.query_pairs()
 			.filter(|(key, _)| key != "format")
@@ -345,11 +359,11 @@ fn cdn_url(key: &str) -> Option<String> {
 		return Some(url.into());
 	}
 	if let Some(source) = key.strip_prefix("embed:") {
-		return embed_url(source, ui::EMBED_EDGE);
+		return embed_url(source, EMBED_EDGE);
 	}
 	// The media viewer's rendition: same validation, larger proxy edge.
 	if let Some(source) = key.strip_prefix("large:") {
-		return embed_url(source, ui::LARGE_EDGE);
+		return embed_url(source, LARGE_EDGE);
 	}
 	// Provider previews arrive only inside a service GIF result; the address is used verbatim.
 	if let Some(source) = key.strip_prefix("gif:") {
@@ -449,7 +463,7 @@ pub(crate) fn embed_url(source: &str, edge: u32) -> Option<String> {
 	};
 	let dimensions = dimension("width")
 		.zip(dimension("height"))
-		.map(|(width, height)| ui::fit_edge(width, height, edge));
+		.map(|(width, height)| fit_edge(width, height, edge));
 	// Static proxy conversion is unofficial. A rejected/unsupported format stays a placeholder;
 	// do not follow redirects, contact the original host, or add animation decoders as fallback.
 	let query: Vec<_> = url
@@ -614,7 +628,7 @@ struct Loaded {
 	/// Downloaded source that decoded; the worker stores it on disk.
 	fetched: Option<Vec<u8>>,
 	image: Option<egui::ColorImage>,
-	frames: ui::GifFrames,
+	frames: GifFrames,
 	error: Option<&'static str>,
 	until: Instant,
 }
@@ -705,7 +719,7 @@ async fn decode_blocking(
 	bytes: Vec<u8>,
 	lottie: bool,
 	early: Option<(async_mpsc::Sender<AvatarResult>, egui::Context)>,
-) -> (Option<egui::ColorImage>, ui::GifFrames, Option<Vec<u8>>) {
+) -> (Option<egui::ColorImage>, GifFrames, Option<Vec<u8>>) {
 	let key = key.to_owned();
 	tokio::task::spawn_blocking(move || {
 		let Some(bytes) = (if lottie {
@@ -832,8 +846,8 @@ async fn download(
 
 /// Decode one still image and keep its longest edge within `edge` pixels.
 fn decode(bytes: &[u8], edge: u32) -> Option<egui::ColorImage> {
-	let large = edge > ui::EMBED_EDGE;
-	let embed = edge >= ui::EMBED_EDGE;
+	let large = edge > EMBED_EDGE;
+	let embed = edge >= EMBED_EDGE;
 	let encoded_limit = if large {
 		MAX_LARGE_ENCODED
 	} else if embed {
@@ -881,7 +895,7 @@ fn decode(bytes: &[u8], edge: u32) -> Option<egui::ColorImage> {
 	))
 }
 
-fn decode_animation(bytes: &[u8], edge: u32) -> Option<ui::GifFrames> {
+fn decode_animation(bytes: &[u8], edge: u32) -> Option<GifFrames> {
 	use image::{AnimationDecoder, ImageDecoder};
 	if bytes.len() > MAX_ANIMATED_ENCODED {
 		return None;
@@ -909,7 +923,7 @@ fn decode_animation(bytes: &[u8], edge: u32) -> Option<ui::GifFrames> {
 		}
 		_ => return None,
 	};
-	let mut frames: ui::GifFrames = Vec::new();
+	let mut frames: GifFrames = Vec::new();
 	let mut stride = 1;
 	let started = Instant::now();
 	for (index, frame) in decoded.take(601).enumerate() {
@@ -926,8 +940,7 @@ fn decode_animation(bytes: &[u8], edge: u32) -> Option<ui::GifFrames> {
 			continue;
 		}
 		let buffer = frame.into_buffer();
-		let (width, height) =
-			ui::fit_edge(buffer.width(), buffer.height(), edge.min(ui::EMBED_EDGE));
+		let (width, height) = fit_edge(buffer.width(), buffer.height(), edge.min(EMBED_EDGE));
 		let image = image::DynamicImage::ImageRgba8(buffer)
 			.thumbnail(width, height)
 			.into_rgba8();
@@ -1124,7 +1137,7 @@ mod tests {
 					"https://cdn.discordapp.com/stickers/7.png"
 				};
 				assert_eq!(super::cdn_url(&key).as_deref(), Some(expected));
-				assert_eq!(super::decode_edge(&key), ui::EMBED_EDGE);
+				assert_eq!(super::decode_edge(&key), EMBED_EDGE);
 				assert!(super::disk_key(&key).unwrap().starts_with("embed-"));
 			}
 		}
@@ -1150,10 +1163,7 @@ mod tests {
 		let source = br#"{"v":"5.7.6","fr":30,"ip":0,"op":30,"w":320,"h":320,"layers":[{"ty":4,"ip":0,"op":30,"st":0,"ks":{"o":{"a":0,"k":100},"r":{"a":0,"k":0},"p":{"a":0,"k":[160,160]},"a":{"a":0,"k":[0,0]},"s":{"a":0,"k":[100,100]}},"shapes":[{"ty":"el","p":{"a":0,"k":[0,0]},"s":{"a":0,"k":[200,200]}},{"ty":"fl","c":{"a":0,"k":[0.2,0.6,1,1]},"o":{"a":0,"k":100},"r":1}]}]}"#;
 		let png = super::render_lottie(source).expect("supported Lottie preview");
 		assert!(png.len() <= super::MAX_ENCODED);
-		assert_eq!(
-			super::decode(&png, ui::EMBED_EDGE).unwrap().size,
-			[160, 160]
-		);
+		assert_eq!(super::decode(&png, EMBED_EDGE).unwrap().size, [160, 160]);
 		assert!(super::render_lottie(&vec![b' '; super::MAX_LOTTIE_ENCODED + 1]).is_none());
 	}
 	#[test]
@@ -1479,18 +1489,18 @@ mod tests {
 			"https://images-ext-1.discordapp.net/external/short/https/example.com/a.png",
 		] {
 			assert!(
-				embed_url(source, ui::EMBED_EDGE).is_none(),
+				embed_url(source, EMBED_EDGE).is_none(),
 				"Unsafe or unsupported test URL was accepted"
 			);
 		}
 		assert!(embed_url(
 			"https://cdn.discordapp.com/guilds/1/users/2/avatars/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.png?size=2048",
-			ui::LARGE_EDGE,
+			LARGE_EDGE,
 		).is_some());
 		assert!(
 			embed_url(
 				"https://cdn.discordapp.com/guilds/1/users/2/avatars/invalid.png",
-				ui::LARGE_EDGE,
+				LARGE_EDGE,
 			)
 			.is_none()
 		);
@@ -1515,7 +1525,7 @@ mod tests {
 		assert!(
 			embed_url(
 				"https://images-ext-1.discordapp.net/external/abcdefghijklmnop/https/example.com/image.jpg",
-				ui::EMBED_EDGE,
+				EMBED_EDGE,
 			)
 			.is_some()
 		);

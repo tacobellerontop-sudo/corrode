@@ -1,7 +1,7 @@
 //! Applies notification device choices to filtered messages and explicit call ringing state.
 use client_core::{State, auth::AuthState};
 use model::{
-	Id, PresenceStatus,
+	Id,
 	notification_preferences::{Device, Sound},
 };
 use std::time::{Duration, Instant};
@@ -47,6 +47,14 @@ impl Runtime {
 		}
 		None
 	}
+	/// Latest sound or badge problem, for the settings dialog.
+	pub fn status(&self) -> &'static str {
+		if self.sounds.status().is_empty() {
+			self.badge_status
+		} else {
+			self.sounds.status()
+		}
+	}
 	pub fn clear(&mut self, window: &winit::window::Window) {
 		self.sounds.stop();
 		self.ring = None;
@@ -59,13 +67,15 @@ impl Runtime {
 	pub fn poll(
 		&mut self,
 		state: &mut State,
-		ui: &mut ui::MessagingUi,
+		ui: &mut solace_ui::Media,
+		enabled: bool,
+		viewing: Option<Id>,
 		window: &winit::window::Window,
 		ctx: &eframe::egui::Context,
 		fixture: bool,
 	) -> Option<Alert> {
 		let live = !fixture && !state.demo && state.auth == AuthState::Authenticated;
-		let audible = live && ui.own_presence.status != PresenceStatus::DoNotDisturb;
+		let audible = live;
 		let options = ui.notification_options;
 		let badges = platform::badge::supported() && options.unread_badge;
 		if options != self.options || (self.was_audible && !audible) {
@@ -81,14 +91,14 @@ impl Runtime {
 		let mut alert = None;
 		let mut sound = None;
 		while let Some(notification) = state.take_notification() {
-			let current = focused && ui.viewing_latest(notification.channel);
+			let current = focused && viewing == Some(notification.channel);
 			let cue = if current {
 				Sound::CurrentChannel
 			} else {
 				Sound::Message
 			};
 			if audible {
-				if ui.notifications_enabled && !current {
+				if enabled && !current {
 					let image_path = state.user.as_ref().and_then(|user| {
 						crate::avatars::notification_image_path(user.id, &notification.avatar_key)
 					});
@@ -161,11 +171,6 @@ impl Runtime {
 		if live && badges {
 			ctx.request_repaint_after(Duration::from_secs(1));
 		}
-		ui.notification_sound_status = if self.sounds.status().is_empty() {
-			self.badge_status
-		} else {
-			self.sounds.status()
-		};
 		alert
 	}
 }

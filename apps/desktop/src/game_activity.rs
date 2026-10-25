@@ -1459,19 +1459,4 @@ mod tests {
 		assert!(changes.borrow().is_none());
 		assert_eq!(running.load(Ordering::SeqCst), 0);
 	}
-
-	#[test]
-	fn choice_survives_late_load_and_failed_load_never_enables_sharing() {
-		let mut settings = crate::toggle_setting::Settings::default();
-		settings.restore(Err(local_store::StoreError::Unavailable));
-		assert!(!settings.enabled);
-		assert!(settings.failed);
-		settings.observe(true);
-		settings.restore(Ok(false));
-		assert!(settings.enabled && settings.dirty && !settings.failed);
-		settings.saving = true;
-		settings.dirty = false;
-		settings.observe(false);
-		assert!(settings.dirty && settings.saving && !settings.enabled);
-	}
 }

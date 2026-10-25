@@ -125,7 +125,7 @@ impl Watch {
 		&mut self,
 		runtime: &Runtime,
 		state: &mut State,
-		ui: &mut ui::MessagingUi,
+		ui: &mut solace_ui::Media,
 		ctx: &egui::Context,
 		call: Option<super::screen::Call<'_>>,
 		audio: Option<std::sync::mpsc::SyncSender<discord_voice::Frame>>,

@@ -202,7 +202,7 @@ impl Screen {
 		&mut self,
 		runtime: &Runtime,
 		state: &State,
-		ui: &mut ui::MessagingUi,
+		ui: &mut solace_ui::Media,
 		ctx: &egui::Context,
 		call: Option<Call<'_>>,
 	) -> Option<Command> {
@@ -320,7 +320,7 @@ impl Screen {
 
 		if let Some(request) = ui.screen.request.take() {
 			match request {
-				ui::screen::Request::Start(settings) => {
+				solace_ui::media::screen::Request::Start(settings) => {
 					let requested = ui.screen.context;
 					let valid = settings
 						.valid()
@@ -370,7 +370,7 @@ impl Screen {
 						self.status = "Screen sharing requires the current connected call";
 					}
 				}
-				ui::screen::Request::Stop => self.request_stop("Stopping screen sharing…"),
+				solace_ui::media::screen::Request::Stop => self.request_stop("Stopping screen sharing…"),
 			}
 		}
 
@@ -559,9 +559,9 @@ mod tests {
 			let active = state.voice.active.as_mut().unwrap();
 			active.phase = voice::Phase::Waiting;
 			let request = active.request;
-			let mut ui = ui::MessagingUi::default();
+			let mut ui = solace_ui::Media::default();
 			ui.screen.context = Some((state.generation, channel, request));
-			ui.screen.request = Some(ui::screen::Request::Start(Settings {
+			ui.screen.request = Some(solace_ui::media::screen::Request::Start(Settings {
 				source: screen::SourceId::Display(1),
 				width: 1280,
 				height: 720,
@@ -676,7 +676,7 @@ mod tests {
 			}),
 			..Screen::default()
 		};
-		let mut ui = ui::MessagingUi::default();
+		let mut ui = solace_ui::Media::default();
 		let call = Call {
 			generation: 0,
 			channel: Id(20),

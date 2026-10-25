@@ -1,0 +1,27 @@
+[package]
+name = "solace-ui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Solace's custom-painted, GPU-rendered interface"
+
+[dependencies]
+egui = { workspace = true, features = ["bytemuck"] }
+model.workspace = true
+client-core.workspace = true
+url.workspace = true
+time = { workspace = true, features = ["local-offset"] }
+image = { version = "=0.25.10", default-features = false, features = ["png"] }
+ruzstd = { version = "0.9.0", default-features = false, features = ["std"] }
+
+[dev-dependencies]
+test-support.workspace = true
+eframe.workspace = true
+
+[[example]]
+# Offline visual preview of the showcase (also used for screenshots):
+# cargo run -p solace-ui --example preview -- [--dark] [--signin] [--out file.png]
+name = "preview"
+
+[lints]
+workspace = true

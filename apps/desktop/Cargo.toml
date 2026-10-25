@@ -1,23 +1,21 @@
 [package]
-name = "corrode"
+name = "solace"
+description = "Solace desktop client"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 
 [features]
 default = []
-# No-op: token sign-in used to require this flag; it is now always built in.
-# Kept only so `--features developer-session` in older scripts keeps building.
-developer-session = []
-demo = ["dep:test-support", "ui/demo"]
+# Offline showcase with synthetic communities: `cargo run -p solace --features demo -- --demo`.
+demo = ["dep:test-support"]
 
 [dependencies]
-extensions.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 discord-voice.workspace = true
 eframe.workspace = true
-ui.workspace = true
+solace-ui.workspace = true
 model.workspace = true
 client-core.workspace = true
 discord-api.workspace = true
@@ -51,10 +49,6 @@ find-msvc-tools = "=0.1.12"
 
 [dev-dependencies]
 test-support.workspace = true
-
-[[example]]
-name = "profile_preview"
-required-features = ["demo"]
 
 [lints]
 workspace = true

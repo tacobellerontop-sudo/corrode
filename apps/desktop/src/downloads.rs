@@ -83,7 +83,7 @@ impl Downloads {
 			.into_iter()
 			.flatten()
 			.find_map(|source| {
-				crate::avatars::embed_url(source, ui::LARGE_EDGE)
+				crate::avatars::embed_url(source, crate::avatars::LARGE_EDGE)
 					.and_then(|url| url::Url::parse(&url).ok())
 			})
 			.ok_or("Embedded image download unavailable")

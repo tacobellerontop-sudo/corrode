@@ -408,7 +408,7 @@ impl Voice {
 		&mut self,
 		runtime: &Runtime,
 		state: &mut State,
-		ui: &mut ui::MessagingUi,
+		ui: &mut solace_ui::Media,
 		ctx: &egui::Context,
 	) -> Option<Command> {
 		self.reap();
@@ -780,7 +780,7 @@ impl Voice {
 		self.watch
 			.poll(runtime, state, ui, ctx, watched, stream_audio)
 	}
-	fn poll_mic_preview(&mut self, state: &State, ui: &mut ui::MessagingUi, ctx: &egui::Context) {
+	fn poll_mic_preview(&mut self, state: &State, ui: &mut solace_ui::Media, ctx: &egui::Context) {
 		if state.demo
 			|| !ui.voice_available
 			|| !ui.voice_settings_open()
@@ -880,7 +880,7 @@ impl Voice {
 		ctx.request_repaint_after(Duration::from_millis(50));
 	}
 
-	fn poll_camera_test(&mut self, state: &State, ui: &mut ui::MessagingUi, ctx: &egui::Context) {
+	fn poll_camera_test(&mut self, state: &State, ui: &mut solace_ui::Media, ctx: &egui::Context) {
 		ui.camera_test_available = !state.demo
 			&& ui.voice_available
 			&& discord_voice::camera::SUPPORTED
@@ -954,7 +954,7 @@ impl Voice {
 		}
 	}
 
-	fn poll_camera_devices(&mut self, demo: bool, ui: &mut ui::MessagingUi, ctx: &egui::Context) {
+	fn poll_camera_devices(&mut self, demo: bool, ui: &mut solace_ui::Media, ctx: &egui::Context) {
 		if demo {
 			ui.voice_refresh_cameras = false;
 			ui.voice_camera_devices_loading = false;
@@ -1009,7 +1009,7 @@ impl Voice {
 	fn poll_camera(
 		&mut self,
 		state: &mut State,
-		ui: &mut ui::MessagingUi,
+		ui: &mut solace_ui::Media,
 		ctx: &egui::Context,
 	) -> Option<Command> {
 		let supported = discord_voice::camera::SUPPORTED;
@@ -1112,7 +1112,7 @@ impl Voice {
 		&mut self,
 		runtime: &Runtime,
 		pending: Pending,
-		ui: &ui::MessagingUi,
+		ui: &solace_ui::Media,
 		ctx: &egui::Context,
 		listen_only: bool,
 		input_enabled: bool,
@@ -1283,84 +1283,6 @@ fn camera_preview_allowed(state: &State) -> bool {
 	})
 }
 
-/// Device-free check of preview rendering and the guards that prevent automatic capture.
-#[cfg(all(debug_assertions, feature = "demo"))]
-pub fn debug_mic_preview_check() {
-	ui::MessagingUi::debug_call_switch_check(test_support::existing_call_demo_state());
-	discord_voice::audio::debug_processing_check();
-	let ctx = egui::Context::default();
-	ui::design::apply(&ctx);
-	let mut state = test_support::demo_state();
-	let mut view = ui::MessagingUi::default();
-	view.voice_available = true;
-	view.preview_settings("voice");
-	assert!(view.voice_settings_open());
-	for (width, profile) in [
-		(480.0, model::voice_settings::InputProfile::VoiceIsolation),
-		(1120.0, model::voice_settings::InputProfile::Studio),
-		(1120.0, model::voice_settings::InputProfile::Custom),
-	] {
-		view.voice_processing.profile = profile;
-		for _ in 0..3 {
-			ctx.run_ui(
-				egui::RawInput {
-					screen_rect: Some(egui::Rect::from_min_size(
-						egui::Pos2::ZERO,
-						egui::vec2(width, 760.0),
-					)),
-					..Default::default()
-				},
-				|ui| {
-					let _ = view.show(ui, &mut state);
-				},
-			)
-			.drop_without_applying_deltas();
-		}
-	}
-	assert!(!view.voice_preview_requested);
-	assert!(!view.camera_test_requested);
-	let mut camera_host = Voice::default();
-	view.camera_test_requested = true;
-	camera_host.poll_camera_test(&state, &mut view, &ctx);
-	assert!(!view.camera_test_requested && camera_host.camera_test.is_none());
-	state.demo = false;
-	view.preview_settings("appearance");
-	view.camera_test_requested = true;
-	camera_host.poll_camera_test(&state, &mut view, &ctx);
-	assert!(!view.camera_test_requested && camera_host.camera_test.is_none());
-	state.demo = true;
-	view.preview_settings("voice");
-	let legacy: local_store::AppPreferences =
-		serde_json::from_str(r#"{"voice_noise_suppression":true}"#).unwrap();
-	let mut preferences = crate::app_settings::Settings {
-		current: legacy,
-		..Default::default()
-	};
-	preferences.apply(&mut view);
-	assert_eq!(
-		view.voice_processing.effective().suppression,
-		model::voice_settings::NoiseSuppression::RnNoise
-	);
-	view.voice_processing.custom.sensitivity_db = Some(-63);
-	preferences.observe(&view);
-	let saved = serde_json::to_string(&preferences.current).unwrap();
-	let restored: local_store::AppPreferences = serde_json::from_str(&saved).unwrap();
-	assert_eq!(restored.voice_processing, Some(view.voice_processing));
-	assert!(restored.is_valid());
-	let mut voice = Voice::default();
-	view.voice_preview_requested = true;
-	voice.poll_mic_preview(&state, &mut view, &ctx);
-	assert!(!view.voice_preview_requested && voice.mic_preview.is_none());
-	state.demo = false;
-	view.preview_settings("appearance");
-	view.voice_preview_requested = true;
-	voice.poll_mic_preview(&state, &mut view, &ctx);
-	assert!(!view.voice_preview_requested && voice.mic_preview.is_none());
-	println!(
-		"Mic/camera preview debug check passed: settings render, opening settings never starts capture, demo and closed-page guards stop requests. No audio devices opened."
-	);
-}
-
 #[cfg(test)]
 mod tests {
 	use super::*;
@@ -1475,7 +1397,7 @@ mod tests {
 	#[allow(clippy::field_reassign_with_default)] // MessagingUi has private fields in another crate.
 	fn camera_discovery_updates_selection_without_starting_capture_and_demo_does_not_scan() {
 		let mut voice = Voice::default();
-		let mut ui = ui::MessagingUi::default();
+		let mut ui = solace_ui::Media::default();
 		ui.voice_refresh_cameras = true;
 		let ctx = egui::Context::default();
 		voice.poll_camera_devices(true, &mut ui, &ctx);
@@ -1699,7 +1621,7 @@ mod tests {
 		let mut manager = Voice::default();
 		manager.begin(&state, false).unwrap();
 		state.disconnect_voice("Discord gateway connection lost; rejoin after reconnecting");
-		let mut ui = ui::MessagingUi::default();
+		let mut ui = solace_ui::Media::default();
 		let context = egui::Context::default();
 		assert!(matches!(
 			manager.poll(&runtime, &mut state, &mut ui, &context),

@@ -6,8 +6,8 @@ fn main() {
 
 fn windows_icon() {
 	use std::{path::PathBuf, process::Command};
-	println!("cargo:rerun-if-changed=../../packaging/windows/Corrode.ico");
-	println!("cargo:rerun-if-changed=../../packaging/windows/corrode.rc");
+	println!("cargo:rerun-if-changed=../../packaging/windows/Solace.ico");
+	println!("cargo:rerun-if-changed=../../packaging/windows/solace.rc");
 	let root = PathBuf::from(std::env::var_os("CARGO_MANIFEST_DIR").unwrap())
 		.join("../../packaging/windows");
 	let out = PathBuf::from(std::env::var_os("OUT_DIR").unwrap());
@@ -21,18 +21,18 @@ fn windows_icon() {
 			.map(|path| path.join("rc.exe"))
 			.find(|path| path.is_file())
 			.expect("Windows SDK rc.exe");
-		let resource = out.join("corrode.res");
+		let resource = out.join("solace.res");
 		let mut compiler = Command::new(rc);
 		compiler
 			.arg("/nologo")
 			.arg("/fo")
 			.arg(&resource)
-			.arg("corrode.rc");
+			.arg("solace.rc");
 		(compiler, resource)
 	} else {
-		let resource = out.join("corrode-icon.o");
+		let resource = out.join("solace-icon.o");
 		let mut compiler = Command::new("windres");
-		compiler.args(["-i", "corrode.rc", "-o"]).arg(&resource);
+		compiler.args(["-i", "solace.rc", "-o"]).arg(&resource);
 		(compiler, resource)
 	};
 	assert!(
@@ -43,5 +43,5 @@ fn windows_icon() {
 			.success(),
 		"application icon resource compilation failed"
 	);
-	println!("cargo:rustc-link-arg-bin=corrode={}", resource.display());
+	println!("cargo:rustc-link-arg-bin=solace={}", resource.display());
 }
