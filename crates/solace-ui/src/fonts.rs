@@ -39,7 +39,7 @@ pub fn install(ctx: &Context) {
 			{
 				let mut frames = scanned.lock().expect("cjk scan");
 				*frames = frames.wrapping_add(1);
-				if *frames % 15 != 0 {
+				if !(*frames).is_multiple_of(15) {
 					return;
 				}
 			}

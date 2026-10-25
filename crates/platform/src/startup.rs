@@ -29,14 +29,14 @@ mod native {
 	};
 
 	const RUN: PCWSTR = w!("Software\\Microsoft\\Windows\\CurrentVersion\\Run");
-	const VALUE: PCWSTR = w!("Corrode");
+	const VALUE: PCWSTR = w!("Solace");
 	// Windows documents a 260-character limit for Run commands, excluding the terminator.
 	const MAX_COMMAND: usize = 260;
 	const READ_ERROR: &str = "Could not read the Windows startup setting.";
 	const WRITE_ERROR: &str = "Could not update the Windows startup setting.";
 	const PATH_ERROR: &str = "This executable path cannot be registered for Windows startup.";
 	const INVALID_ENTRY: &str =
-		"The Corrode startup entry does not match this application. Turn startup on to replace it.";
+		"The Solace startup entry does not match this application. Turn startup on to replace it.";
 
 	pub fn load() -> Result<Settings, &'static str> {
 		let executable = std::env::current_exe().map_err(|_| PATH_ERROR)?;
@@ -66,7 +66,7 @@ mod native {
 		let command = format!("\"{path}\" --autostart{suffix}");
 		if command.encode_utf16().count() > MAX_COMMAND {
 			return Err(
-				"The executable path is too long for Windows startup. Move Corrode to a shorter path.",
+				"The executable path is too long for Windows startup. Move Solace to a shorter path.",
 			);
 		}
 		Ok(command)
@@ -149,10 +149,10 @@ mod native {
 
 		#[test]
 		fn startup_commands_are_quoted_bounded_and_exact() {
-			let executable = Path::new(r"C:\Program Files\Corrode\corrode.exe");
+			let executable = Path::new(r"C:\Program Files\Solace\solace.exe");
 			for minimized in [false, true] {
 				let command = startup_command(executable, minimized).unwrap();
-				assert!(command.starts_with(r#""C:\Program Files\Corrode\corrode.exe" --autostart"#));
+				assert!(command.starts_with(r#""C:\Program Files\Solace\solace.exe" --autostart"#));
 				assert_eq!(
 					parse_command(&command, executable),
 					Ok(Settings {
@@ -163,7 +163,7 @@ mod native {
 				assert!(parse_command(&(command + " --other"), executable).is_err());
 			}
 			for path in [
-				"corrode.exe",
+				"solace.exe",
 				"C:\\bad\"path.exe",
 				"C:\\bad\0path.exe",
 				"C:\\folder\\",
@@ -180,7 +180,7 @@ mod native {
 			);
 			assert!(startup_command(Path::new(&boundary), true).is_err());
 			assert!(startup_command(Path::new(&boundary.replace('x', "😀")), false).is_err());
-			assert!(parse_command(r#""C:\Other\corrode.exe" --autostart"#, executable).is_err());
+			assert!(parse_command(r#""C:\Other\solace.exe" --autostart"#, executable).is_err());
 		}
 
 		#[test]
@@ -198,12 +198,12 @@ mod native {
 			let mut nonce = [0_u8; 8];
 			getrandom::fill(&mut nonce).unwrap();
 			let name = format!(
-				"Software\\CorrodeStartupTest-{:016x}",
+				"Software\\SolaceStartupTest-{:016x}",
 				u64::from_le_bytes(nonce)
 			);
 			let key = TestKey(name.encode_utf16().chain(Some(0)).collect());
 			let subkey = PCWSTR(key.0.as_ptr());
-			let executable = Path::new(r"C:\Synthetic Folder\corrode.exe");
+			let executable = Path::new(r"C:\Synthetic Folder\solace.exe");
 			assert_eq!(load_at(subkey, executable), Ok(Settings::default()));
 			save_at(subkey, None).unwrap();
 			for minimized in [false, true, false] {

@@ -372,6 +372,7 @@ pub fn state() -> State {
 			member: None,
 		});
 	}
+	state.auth = client_core::auth::AuthState::Authenticated;
 	state.gateway_connected = true;
 	state.freshness = model::Freshness::Fresh;
 	state.status = "Offline showcase · synthetic data only";

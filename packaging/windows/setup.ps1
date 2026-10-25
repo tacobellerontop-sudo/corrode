@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-Installs or uninstalls Corrode for the current Windows user without elevation.
+Installs or uninstalls Solace for the current Windows user without elevation.
 Preserves write permissions for seamless in-app autoupdates.
 #>
 param(
@@ -9,21 +9,21 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$appName = 'Corrode'
-$publisher = 'Corrode contributors'
+$appName = 'Solace'
+$publisher = 'Solace contributors'
 # Fork: no upstream repository is linked.
 $website = ''
 $installDir = Join-Path $env:LOCALAPPDATA "Programs\$appName"
 $uninstallKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\$appName"
 $shortcut = Join-Path ([Environment]::GetFolderPath('Programs')) "$appName.lnk"
 
-# Check if Corrode is currently running
-$running = Get-Process corrode -ErrorAction SilentlyContinue
+# Check if Solace is currently running
+$running = Get-Process solace -ErrorAction SilentlyContinue
 if ($running) {
     if ($Quiet) {
         $running | Stop-Process -Force
     } else {
-        throw "Corrode is currently running. Please close Corrode before running setup."
+        throw "Solace is currently running. Please close Solace before running setup."
     }
 }
 
@@ -42,21 +42,21 @@ if ($Uninstall) {
         Remove-Item -LiteralPath $installDir -Recurse -Force
     }
     if (!$Quiet) {
-        Write-Host "Corrode was successfully uninstalled."
+        Write-Host "Solace was successfully uninstalled."
     }
     return
 }
 
 # Install
 $distDir = $PSScriptRoot
-$executable = Join-Path $distDir 'corrode.exe'
+$executable = Join-Path $distDir 'solace.exe'
 if (!(Test-Path -LiteralPath $executable)) {
-    $candidate = Join-Path (Join-Path $distDir '..\..\dist') 'corrode.exe'
+    $candidate = Join-Path (Join-Path $distDir '..\..\dist') 'solace.exe'
     if (Test-Path -LiteralPath $candidate) {
         $distDir = (Resolve-Path (Join-Path $distDir '..\..\dist')).Path
         $executable = $candidate
     } else {
-        throw "corrode.exe not found in $distDir. Run this script from the release package directory or build the project first."
+        throw "solace.exe not found in $distDir. Run this script from the release package directory or build the project first."
     }
 }
 
@@ -77,7 +77,7 @@ if (Test-Path -LiteralPath $notificationScript) {
 # Determine version
 $version = '0.1.0'
 try {
-    $versionInfo = (Get-Item -LiteralPath (Join-Path $installDir 'corrode.exe')).VersionInfo.ProductVersion
+    $versionInfo = (Get-Item -LiteralPath (Join-Path $installDir 'solace.exe')).VersionInfo.ProductVersion
     if ($versionInfo) { $version = $versionInfo }
 } catch {}
 
@@ -90,7 +90,7 @@ $uninstallCmd = "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$inst
 Set-ItemProperty -LiteralPath $uninstallKey -Name 'DisplayName' -Value $appName
 Set-ItemProperty -LiteralPath $uninstallKey -Name 'DisplayVersion' -Value $version
 Set-ItemProperty -LiteralPath $uninstallKey -Name 'Publisher' -Value $publisher
-Set-ItemProperty -LiteralPath $uninstallKey -Name 'DisplayIcon' -Value "$installDir\corrode.exe,0"
+Set-ItemProperty -LiteralPath $uninstallKey -Name 'DisplayIcon' -Value "$installDir\solace.exe,0"
 Set-ItemProperty -LiteralPath $uninstallKey -Name 'InstallLocation' -Value $installDir
 Set-ItemProperty -LiteralPath $uninstallKey -Name 'UninstallString' -Value $uninstallCmd
 Set-ItemProperty -LiteralPath $uninstallKey -Name 'QuietUninstallString' -Value "$uninstallCmd -Quiet"
@@ -99,5 +99,5 @@ Set-ItemProperty -LiteralPath $uninstallKey -Name 'NoModify' -Value 1 -Type DWor
 Set-ItemProperty -LiteralPath $uninstallKey -Name 'NoRepair' -Value 1 -Type DWord
 
 if (!$Quiet) {
-    Write-Host "Corrode $version installed successfully to $installDir"
+    Write-Host "Solace $version installed successfully to $installDir"
 }

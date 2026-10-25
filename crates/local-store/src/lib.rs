@@ -173,9 +173,13 @@ impl<'de> serde::Deserialize<'de> for CachedEmbeds {
 }
 impl LocalStore {
 	pub fn open_default() -> Result<Self> {
-		let root = dirs::data_local_dir()
-			.ok_or(StoreError::Unavailable)?
-			.join("Corrode");
+		let data = dirs::data_local_dir().ok_or(StoreError::Unavailable)?;
+		let root = data.join("Solace");
+		// Carry local data over from the pre-rename "Corrode" folder once.
+		let legacy = data.join("Corrode");
+		if !root.exists() && legacy.is_dir() {
+			let _ = std::fs::rename(&legacy, &root);
+		}
 		std::fs::create_dir_all(&root).map_err(|_| StoreError::Unavailable)?;
 		Self::open(&root.join("client.sqlite3"))
 	}
@@ -1430,7 +1434,7 @@ mod tests {
 	fn switcher_roster_orders_by_last_use_prunes_and_clears_with_the_account() {
 		use super::{Id, LocalStore};
 		let path =
-			std::env::temp_dir().join(format!("corrode-accounts-{}.sqlite", std::process::id()));
+			std::env::temp_dir().join(format!("solace-accounts-{}.sqlite", std::process::id()));
 		let _ = std::fs::remove_file(&path);
 		let mut store = LocalStore::open(&path).unwrap();
 		let entry = |id: u64| model::SavedAccount {
@@ -1534,7 +1538,7 @@ mod tests {
 	fn roster_upgrade_keeps_existing_accounts_switchable_without_rewriting_their_entries() {
 		use super::{Id, LocalStore};
 		let path = std::env::temp_dir().join(format!(
-			"corrode-roster-upgrade-{}.sqlite",
+			"solace-roster-upgrade-{}.sqlite",
 			std::process::id()
 		));
 		let _ = std::fs::remove_file(&path);
@@ -1566,7 +1570,7 @@ mod tests {
 	#[test]
 	fn forwarded_snapshot_survives_cache_reopen_and_upgrade() {
 		let path =
-			std::env::temp_dir().join(format!("corrode-forwarded-{}.sqlite", std::process::id()));
+			std::env::temp_dir().join(format!("solace-forwarded-{}.sqlite", std::process::id()));
 		let _ = std::fs::remove_file(&path);
 		let store = LocalStore::open(&path).unwrap();
 		store.0.execute("INSERT INTO messages(account,channel,id,author,name,content,edited,unsupported) VALUES('1','2','100','4','Synthetic','snapshot text',0,0)", []).unwrap();
@@ -1764,7 +1768,7 @@ mod tests {
 	#[test]
 	fn reply_deletion_schema_migrates_reopens_and_rejects_invalid_markers() {
 		let root = std::env::temp_dir().join(format!(
-			"corrode-synthetic-reply-schema-{}",
+			"solace-synthetic-reply-schema-{}",
 			std::process::id()
 		));
 		std::fs::create_dir_all(&root).unwrap();
@@ -1843,7 +1847,7 @@ mod tests {
 	#[test]
 	fn divergent_schema_seven_and_eight_preserve_union_after_reopen() {
 		let root = std::env::temp_dir().join(format!(
-			"corrode-synthetic-union-schema-{}",
+			"solace-synthetic-union-schema-{}",
 			std::process::id()
 		));
 		std::fs::create_dir_all(&root).unwrap();
@@ -1927,7 +1931,7 @@ mod tests {
 	#[test]
 	fn union_migration_failure_rolls_back_columns_and_schema_version() {
 		let root = std::env::temp_dir().join(format!(
-			"corrode-synthetic-union-rollback-{}",
+			"solace-synthetic-union-rollback-{}",
 			std::process::id()
 		));
 		std::fs::create_dir_all(&root).unwrap();
@@ -1995,7 +1999,7 @@ mod tests {
 	#[test]
 	fn minimize_to_tray_is_bounded_opt_out_surviving_restart_and_logout() {
 		let root = std::env::temp_dir().join(format!(
-			"corrode-synthetic-minimize-to-tray-{}",
+			"solace-synthetic-minimize-to-tray-{}",
 			std::process::id()
 		));
 		std::fs::create_dir_all(&root).unwrap();
@@ -2071,7 +2075,7 @@ mod tests {
 	#[test]
 	fn game_activity_defaults_migrates_reopens_and_survives_logout() {
 		let root = std::env::temp_dir().join(format!(
-			"corrode-synthetic-game-activity-{}",
+			"solace-synthetic-game-activity-{}",
 			std::process::id()
 		));
 		std::fs::create_dir_all(&root).unwrap();
@@ -2147,7 +2151,7 @@ mod tests {
 	#[test]
 	fn schema_seven_reading_preferences_migrate_reopen_reset_and_survive_logout() {
 		let root = std::env::temp_dir().join(format!(
-			"corrode-synthetic-reading-preferences-{}",
+			"solace-synthetic-reading-preferences-{}",
 			std::process::id()
 		));
 		std::fs::create_dir_all(&root).unwrap();
@@ -2453,7 +2457,7 @@ mod tests {
 	#[test]
 	fn known_deletions_survive_reopen_and_preserve_other_channels_accounts_and_drafts() {
 		let root =
-			std::env::temp_dir().join(format!("corrode-synthetic-deletions-{}", std::process::id()));
+			std::env::temp_dir().join(format!("solace-synthetic-deletions-{}", std::process::id()));
 		std::fs::create_dir_all(&root).unwrap();
 		let path = root.join("test.sqlite3");
 		let mut store = LocalStore::open(&path).unwrap();
@@ -2493,7 +2497,7 @@ mod tests {
 	#[test]
 	fn schema_six_marker_migration_preserves_rows_and_rejects_invalid_bits() {
 		let root = std::env::temp_dir().join(format!(
-			"corrode-synthetic-content-markers-{}",
+			"solace-synthetic-content-markers-{}",
 			std::process::id()
 		));
 		std::fs::create_dir_all(&root).unwrap();
@@ -2638,7 +2642,7 @@ mod tests {
 	#[test]
 	fn schema_four_attachment_migration_reopen_and_limits() {
 		let root = std::env::temp_dir().join(format!(
-			"corrode-synthetic-attachments-{}",
+			"solace-synthetic-attachments-{}",
 			std::process::id()
 		));
 		std::fs::create_dir_all(&root).unwrap();
@@ -2746,7 +2750,7 @@ mod tests {
 	#[test]
 	fn account_isolation_draft_reopen_eviction_and_logout() {
 		let root =
-			std::env::temp_dir().join(format!("corrode-synthetic-store-{}", std::process::id()));
+			std::env::temp_dir().join(format!("solace-synthetic-store-{}", std::process::id()));
 		std::fs::create_dir_all(&root).unwrap();
 		let path = root.join("test.sqlite3");
 		let legacy = Connection::open(&path).unwrap();

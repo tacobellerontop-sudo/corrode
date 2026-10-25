@@ -28,10 +28,10 @@ leaving enough time for each complete clip before its next playback.
 ## Attribution
 
 All bundled notification sounds are credited to Discord, Inc. The source links
-and SHA-256 hashes above identify each original asset. Corrode is an unofficial
+and SHA-256 hashes above identify each original asset. Solace is an unofficial
 client and is not affiliated with or endorsed by Discord.
 
-These sound assets belong to Discord, Inc. and are not covered by Corrode's
+These sound assets belong to Discord, Inc. and are not covered by Solace's
 MIT/Apache licenses. No redistribution grant is documented in this repository;
 review the [Discord terms](https://discord.com/terms) and obtain appropriate
 permission before distributing builds containing them. Public download access

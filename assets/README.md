@@ -1,4 +1,4 @@
-No Discord logos or proprietary fonts are bundled. The notification sounds are Discord audio assets; see [sound provenance and redistribution limitations](sounds/README.md). The interface leads proportional text with three unmodified SIL Open Font License 1.1 Inter faces (Regular, Medium, SemiBold; the heavier two form the `medium`/`semibold` families because egui has no synthetic bold), keeps egui's default faces as fallbacks, and appends three unmodified OFL fallback faces (CJK, Arabic, Math) to every family. They are embedded once in the executable (the CJK face as a zstd archive inflated on first use); there is no runtime font download or render-time filesystem access.
+No Discord logos or proprietary fonts are bundled. The notification sounds are Discord audio assets; see [sound provenance and redistribution limitations](sounds/README.md). The interface leads proportional text with three unmodified SIL Open Font License 1.1 Inter faces and sets titles in two unmodified OFL Source Serif 4 Display faces (Regular, Semibold) as the `solace-serif` families; (Regular, Medium, SemiBold; the heavier two form the `medium`/`semibold` families because egui has no synthetic bold), keeps egui's default faces as fallbacks, and appends three unmodified OFL fallback faces (CJK, Arabic, Math) to every family. They are embedded once in the executable (the CJK face as a zstd archive inflated on first use); there is no runtime font download or render-time filesystem access.
 
 | Asset | Upstream version | Bytes | Copyright and license |
 |---|---|---:|---|
@@ -8,6 +8,8 @@ No Discord logos or proprietary fonts are bundled. The notification sounds are D
 | `fonts/Inter-Regular.ttf` | 3.19 (hinted) | 680,240 | Copyright (c) 2016-2020 The Inter Project Authors; [OFL 1.1](fonts/Inter-OFL.txt) |
 | `fonts/Inter-Medium.ttf` | 3.19 (hinted) | 694,512 | Copyright (c) 2016-2020 The Inter Project Authors; [OFL 1.1](fonts/Inter-OFL.txt) |
 | `fonts/Inter-SemiBold.ttf` | 3.19 (hinted) | 710,040 | Copyright (c) 2016-2020 The Inter Project Authors; [OFL 1.1](fonts/Inter-OFL.txt) |
+| `fonts/SourceSerif4Display-Regular.ttf` | 4.005 (Source Serif 4.5.1 release) | 296,680 | © 2014–2023 Adobe, Reserved Font Name ‘Source’; [OFL 1.1](fonts/SourceSerif4-OFL.md) |
+| `fonts/SourceSerif4Display-Semibold.ttf` | 4.005 (Source Serif 4.5.1 release) | 302,412 | © 2014–2023 Adobe, Reserved Font Name ‘Source’; [OFL 1.1](fonts/SourceSerif4-OFL.md) |
 
 Downloaded September 10, 2026 from pinned upstream sources:
 
@@ -15,22 +17,22 @@ Downloaded September 10, 2026 from pinned upstream sources:
 - [Noto Sans Arabic font](https://github.com/google/fonts/blob/334b789e33413f3aba4264d9aa6c97f7b94c5a2f/ofl/notosansarabic/NotoSansArabic%5Bwdth%2Cwght%5D.ttf), [license](https://github.com/google/fonts/blob/334b789e33413f3aba4264d9aa6c97f7b94c5a2f/ofl/notosansarabic/OFL.txt). The upstream variable-font filename is shortened locally; font bytes are unchanged. SHA-256: `63111b5b2e074dd48cc67692e0a2726d86ee94c1c37fe8598257b7b4e87e869e`.
 - [Noto Sans Math 3.000](https://github.com/notofonts/math/releases/tag/NotoSansMath-v3.000) unhinted OpenType face from the official release archive (SHA-256 `ac351837b41f8a897f020b97fb0f075ad574c1e9669fb5839ada1f92fd748356`). The font bytes are unchanged. SHA-256: `a3a3904ede36039d4ba8177ec0aa9cf90653e7c7927d74d766bf31ea26e2a7c1`.
 
+- [Source Serif 4](https://github.com/adobe-fonts/source-serif) static `TTF/SourceSerif4Display-Regular.ttf` and `TTF/SourceSerif4Display-Semibold.ttf` from Adobe's `source-serif` 4.5.1 npm release tarball (`https://registry.npmjs.org/source-serif/-/source-serif-4.5.1.tgz`), unmodified, with its `LICENSE.md` as `fonts/SourceSerif4-OFL.md`. SHA-256: Regular `a1788d674713c99e61d4541c85e5cfbc3145c4e746b0185c674a0b15f7313295`, Semibold `ba711c7443224e9c95bc5fcd24a98f3d921e50b3873c27667884351067927a03`.
+
 - [Inter 3.19](https://github.com/rsms/inter/releases/tag/v3.19) static TrueType instances `Inter-Regular.ttf`, `Inter-Medium.ttf`, `Inter-SemiBold.ttf`, taken from the `Inter Hinted for Windows/Desktop/` directory of the official `Inter-3.19.zip` release archive (SHA-256 `150ab6230d1762a57bebf35dfc04d606ff91598a31d785f7f100356ecdcc0032`), re-fetched September 15, 2026. The archive's `LICENSE.txt` is byte-identical to the bundled `fonts/Inter-OFL.txt`. SHA-256: Regular `529be850e06f62f8904f22bda77e45bde4834498fdbec4ff4201fa3177447a3a`, Medium `6df88fcb83ac96582350f801355c6eff55f15710093e9627fb431caa40521151`, SemiBold `2de533bda937a063c595b07c6bd9b70c8c5087d0649a1c8330f7ac11fcc05602`.
 
   These are the hinted TrueType builds. Upstream also ships CFF outlines. egui paints
-  grayscale coverage, not DirectWrite ClearType. Corrode leaves the TrueType interpreter
+  grayscale coverage, not DirectWrite ClearType. Solace leaves the TrueType interpreter
   off and keeps sub-pixel binning on. Dark mode remaps coverage with
   `FontColorTransferFunction::Gamma(0.5)`. Light mode leaves the transfer function off.
   Inter faces set `FontTweak.hinting` to `Some(false)`. The files stay the hinted
   TrueType builds. The interpreter does not run. Glyph designs and advance widths are
   unchanged, so layout is unaffected.
 
-The six font blobs total **19,876,512 bytes (18.96 MiB)**. Their embedded sizes stay below the 16 MiB ceiling asserted by `cargo test -p ui bundled_fallbacks`. This raw size is separate from compressed distribution size, font-parser/layout memory and GPU glyph-atlas allocations. Package the license files and third-party copyright notices with the executable.
+The eight font blobs total **20,475,604 bytes (19.53 MiB)**. This raw size is separate from compressed distribution size, font-parser/layout memory and GPU glyph-atlas allocations. Package the license files and third-party copyright notices with the executable.
 
-The focused test checks egui glyph availability for synthetic Japanese kana/kanji, simplified/traditional Chinese, Korean, Arabic, mathematical alphanumeric symbols, Latin and combining accents in both font families. It does not prove complete Unicode coverage, correct Arabic shaping/bidirectional editing, actual IME behavior, screen-reader behavior, or platform rendering. The single CJK face uses Japanese regional Han forms; locale-specific forms and extended emoji remain incomplete. Fallback glyphs in code blocks are not guaranteed to have the primary monospace font's cell width.
-
-Test detail: egui 0.36.2's [`Font::has_glyph`](https://github.com/emilk/egui/blob/49682f8baa058bf49e011035cfbd6e825f88a5ef/crates/epaint/src/text/font.rs#L663) compares the selected face with the replacement face. Our initial test observed a false negative for `H`; inspecting that implementation explains why valid glyphs on the replacement face fail this query. The test therefore uses egui's already-resolved Skrifa parser to check every sample scalar against the actual configured face charmaps, then separately checks egui's installed CJK/Arabic fallback path. It does not skip missing sample glyphs.
+`cargo test -p solace-ui fonts` checks that every Solace font family lays out text. It does not prove complete Unicode coverage, Arabic shaping, IME behavior or platform rendering; the single CJK face uses Japanese regional Han forms.
 
 ## Icons
 
-`icons/atlas.png` (38,534 bytes, 512×320 RGBA) bundles 37 [Phosphor Icons](https://github.com/phosphor-icons/core) 2.1.1 glyphs under the MIT license; see [icons/README.md](icons/README.md) for the pinned sources, hashes and the `resvg` regeneration command.
+Solace draws its icons as vector paths in `crates/solace-ui/src/icons.rs`; no icon font or raster atlas is bundled.

@@ -223,7 +223,7 @@ fn package_windows(root: &std::path::Path) -> Result<(), String> {
 		println!(
 			"Windows installer created: {}",
 			installer_dir
-				.join(format!("Corrode-{version}-setup.exe"))
+				.join(format!("Solace-{version}-setup.exe"))
 				.display()
 		);
 	} else {
@@ -242,13 +242,13 @@ fn package() -> Result<(), String> {
 		"--release",
 		"--locked",
 		"-p",
-		"Corrode",
+		"Solace",
 		"--no-default-features",
 	];
 	run(&arguments)?;
 	let root = PathBuf::from("dist");
 	std::fs::create_dir_all(&root).map_err(|e| e.to_string())?;
-	let exe = "corrode.exe";
+	let exe = "solace.exe";
 	let destination = root.join(exe);
 	std::fs::copy(
 		"packaging/windows/install-notifications.ps1",
@@ -280,6 +280,7 @@ fn package() -> Result<(), String> {
 		"NotoSansArabic-OFL.txt",
 		"NotoSansMath-OFL.txt",
 		"Inter-OFL.txt",
+		"SourceSerif4-OFL.md",
 	] {
 		std::fs::copy(
 			PathBuf::from("assets/fonts").join(file),
@@ -295,16 +296,6 @@ fn package() -> Result<(), String> {
 	std::fs::copy(
 		"assets/twemoji/LICENSE-UNICODE",
 		resources.join("licenses/Unicode-LICENSE.txt"),
-	)
-	.map_err(|e| e.to_string())?;
-	std::fs::copy(
-		"assets/icons/LICENSE",
-		resources.join("licenses/Phosphor-Icons-MIT.txt"),
-	)
-	.map_err(|e| e.to_string())?;
-	std::fs::copy(
-		"assets/icons/LICENSE-SIMPLE-ICONS",
-		resources.join("licenses/Simple-Icons-CC0.txt"),
 	)
 	.map_err(|e| e.to_string())?;
 	copy_directory(
@@ -382,7 +373,7 @@ fn main() -> ExitCode {
 					])
 				})
 				.and_then(|_| run(&["test", "--workspace", "--locked"]))
-				.and_then(|_| run(&["check", "-p", "Corrode", "--no-default-features", "--locked"]))
+				.and_then(|_| run(&["check", "-p", "Solace", "--no-default-features", "--locked"]))
 				.and_then(|_| policy()),
 			"policy" => policy(),
 			"licenses" => licenses(),

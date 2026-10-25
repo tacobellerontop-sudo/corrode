@@ -100,15 +100,30 @@ fn main() -> eframe::Result {
 		"Solace preview",
 		options,
 		Box::new(move |cc| {
+			let args: Vec<String> = std::env::args().collect();
 			solace_ui::install(&cc.egui_ctx)?;
 			cc.egui_ctx.set_theme(if dark {
 				egui::ThemePreference::Dark
 			} else {
 				egui::ThemePreference::Light
 			});
-			let state = showcase::state();
+			let mut state = showcase::state();
 			let mut solace = Solace::default();
 			showcase::decorate(&mut solace, &cc.egui_ctx, &state);
+			if dark {
+				solace.theme = egui::ThemePreference::Dark;
+			}
+			if args.iter().any(|a| a == "--dm") {
+				solace.open_thread(None);
+				let dm = solace_ui::nav::direct(&state)
+					.first()
+					.map(|c| c.id)
+					.unwrap();
+				let _ = state.select(dm);
+			}
+			if args.iter().any(|a| a == "--settings") {
+				solace.open_settings(solace_ui::SettingsPage::Appearance);
+			}
 			Ok(Box::new(Preview {
 				state,
 				solace,

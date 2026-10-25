@@ -93,7 +93,7 @@ fn voice_card(
 				})
 				.map(|c| (*c).clone())
 		}
-		(None, None) => state.can_call(channel.id).then(|| channel.clone()),
+		(None, None) => matches!(channel.kind, 1 | 3).then(|| channel.clone()),
 	};
 
 	let texture = solace
@@ -129,7 +129,11 @@ fn voice_card(
 		ui.painter(),
 		rect.left_top() + vec2(18.0, 28.0),
 		Align2::LEFT_CENTER,
-		"Voice Room",
+		if channel.guild.is_some() {
+			"Voice Room"
+		} else {
+			"Call"
+		},
 		theme::medium(12.5),
 		ink,
 	);
@@ -190,6 +194,7 @@ fn voice_card(
 		Some((id, phase, ..)) if *id == room.id && *phase != Phase::Connected => {
 			phase.label().trim_end_matches("...").to_owned()
 		}
+		_ if participants.is_empty() => "Quiet for now".to_owned(),
 		_ => format!("{} listening • {} speaking", participants.len(), speaking),
 	};
 	paint::text_left(

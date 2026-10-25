@@ -7,10 +7,10 @@ pub fn extension_source(
 ) -> impl std::future::Future<Output = Option<PathBuf>> + Send + 'static {
 	let dialog = rfd::AsyncFileDialog::new()
 		.set_parent(parent.as_ref())
-		.set_title("Import Corrode extension")
+		.set_title("Import Solace extension")
 		.add_filter(
-			"Corrode extensions",
-			&["corrode-extension", "serein-extension", "json"],
+			"Solace extensions",
+			&["solace-extension", "serein-extension", "json"],
 		)
 		.pick_file();
 	async move {
@@ -72,9 +72,9 @@ pub fn theme_destination(
 ) -> impl std::future::Future<Output = Option<PathBuf>> + Send + 'static {
 	let dialog = rfd::AsyncFileDialog::new()
 		.set_parent(parent.as_ref())
-		.set_title("Export Corrode theme")
+		.set_title("Export Solace theme")
 		.set_file_name(safe_filename(filename))
-		.add_filter("Corrode theme", &["corrode-extension", "serein-extension"])
+		.add_filter("Solace theme", &["solace-extension", "serein-extension"])
 		.save_file();
 	async move {
 		let file = dialog.await?;
@@ -197,7 +197,7 @@ mod tests {
 	fn completed_files_publish_without_clobbering() {
 		let mut random = [0_u8; 16];
 		getrandom::fill(&mut random).unwrap();
-		let root = std::env::temp_dir().join(format!("corrode-save-{random:02x?}"));
+		let root = std::env::temp_dir().join(format!("solace-save-{random:02x?}"));
 		std::fs::create_dir(&root).unwrap();
 		let source = root.join("partial");
 		let destination = root.join("attachment");

@@ -195,7 +195,7 @@ mod native {
 		#[tokio::test]
 		async fn private_pipe_roundtrip_contention_and_release() {
 			let name = format!(
-				r"\\.\pipe\corrode-test-{}-{}",
+				r"\\.\pipe\solace-test-{}-{}",
 				std::process::id(),
 				getrandom::u64().unwrap()
 			);

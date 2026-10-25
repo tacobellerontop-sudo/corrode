@@ -63,6 +63,7 @@ impl Runtime {
 		}
 		self.badge = None;
 	}
+	#[allow(clippy::too_many_arguments)]
 	/// Returns a coalesced desktop alert request. Sound is independent of desktop alerts.
 	pub fn poll(
 		&mut self,

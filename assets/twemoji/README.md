@@ -25,9 +25,9 @@ of padding on each edge of every 32×32 cell, then losslessly recompressed with
 Regenerate from the repository root (Pillow is a development dependency only):
 
 ```sh
-python3 -m venv /tmp/corrode-twemoji-venv
-/tmp/corrode-twemoji-venv/bin/pip install Pillow==11.3.0
-/tmp/corrode-twemoji-venv/bin/python tools/generate-twemoji.py
+python3 -m venv /tmp/solace-twemoji-venv
+/tmp/solace-twemoji-venv/bin/pip install Pillow==11.3.0
+/tmp/solace-twemoji-venv/bin/python tools/generate-twemoji.py
 ```
 
 The generator downloads the commit-pinned archive and verifies its hash before

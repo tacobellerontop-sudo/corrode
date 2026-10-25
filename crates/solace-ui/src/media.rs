@@ -28,6 +28,7 @@ pub mod screen {
 
 /// Screen-share selection. Solace does not offer screen sharing in its interface yet; the
 /// engine still consults this so an active share from elsewhere is stopped cleanly.
+#[derive(Default)]
 pub struct ScreenUi {
 	pub context: Option<(u64, Id, u64)>,
 	pub open: bool,
@@ -40,24 +41,6 @@ pub struct ScreenUi {
 	pub capture_status: Option<&'static str>,
 	pub supported: bool,
 	pub preview: Option<egui::TextureHandle>,
-}
-
-impl Default for ScreenUi {
-	fn default() -> Self {
-		Self {
-			context: None,
-			open: false,
-			sources: Vec::new(),
-			selected: None,
-			refresh_requested: false,
-			request: None,
-			busy: false,
-			status: "",
-			capture_status: None,
-			supported: false,
-			preview: None,
-		}
-	}
 }
 
 /// Field names mirror what the call engine reads and writes.

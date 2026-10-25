@@ -1,6 +1,6 @@
 # Architecture
 
-Corrode is a desktop protocol client for Discord, with no project messaging service. The final owner revisions permit an authentication-only webview, saved login, and local caches.
+Solace is a desktop protocol client for Discord, with no project messaging service. The final owner revisions permit an authentication-only webview, saved login, and local caches.
 
 Incoming typing has its own eight-slot lossy inbox, separate from reliable message events.
 The producer filters the selected channel and limits duplicate/burst wakeups to eight per two
@@ -17,7 +17,7 @@ The composer schedules one visible expiry deadline and performs no animation or 
 - `discord-gateway`: independent Tokio task; JSON without compression, Hello/ACK/heartbeats, Identify/Resume, bounded initial login retries and persistent reconnection with capped backoff after READY. UI queue overload stops the connection instead of silently losing message mutations.
 - `local-store`: SQLite transactions, global disk ceilings, account-isolated messages/drafts. A dedicated worker serializes operations away from rendering.
 - `platform`: OS credential store, temporary Wry login webview and native file-save dialog. No system profile/token extraction. Credential operations are serialized by a dedicated worker to order saves before logout deletion.
-- `ui`: egui panels, viewport virtualization and multiline composition; typed commands only. No network requests or tokens.
+- `solace-ui`: the custom-painted interface (rail, sidebar, conversation, thread, context column, dialogs) rendered through egui's wgpu backend; reads `State`, emits typed commands and desktop requests only. No network requests or tokens.
 - `apps/desktop`: wiring, cancellation, bounded queues, native login lifecycle, cache hydration and eframe options. `test-support` is explicitly synthetic; `xtask` and `replay-bench` are development tools.
 
 No generic plugin system, bot SDK or external database is introduced. The `discord-voice` crate provides native DM and guild media in every desktop build.
@@ -47,7 +47,7 @@ The active People pane retains at most 100 service list positions and 128 KiB of
 
 Avatar metadata travels through user/message DTOs and SQLite alongside embeds, attachments, mentioned users and unsupported-content presence bits. A credential-free worker constructs Discord CDN image URLs from validated IDs/hashes and validates service-proxied message image URLs, disables redirects/proxy discovery, and does disk I/O and bounded decoding away from the render thread. The UI requests visible images, deduplicates attempts, and owns a 256-entry / 64 MiB texture cache plus at most four animations / 16 MiB of retained animation pixels. Four downloads can overlap; decoding stays serial. Account cache directories can retain 1 GiB / 4096 encoded images. See storage-policy.md for exact queue/decoder limits and cleanup ordering.
 
-The image viewer is a full-window egui modal sharing the bounded texture cache; its larger image is reduced to a longest edge of 2048 pixels. Explicit Download uses a separate credential-free client and a single worker, after a native destination choice. Only the selected CDN attachment original is streamed; no message filename becomes a path without native user selection. Progress is coalesced, transfer bytes are bounded at 100 MiB, and filesystem writes/flush/cleanup run off the render thread. A sibling partial is published only on complete success; cancellation and ordinary shutdown wait for cleanup. Native Windows dialogs are provided by rfd. Download guarantees and limitations are strictly enforced.
+Images display inline from the bounded texture cache (512-pixel renditions). Explicit Download uses a separate credential-free client and a single worker, after a native destination choice. Only the selected CDN attachment original is streamed; no message filename becomes a path without native user selection. Progress is coalesced, transfer bytes are bounded at 100 MiB, and filesystem writes/flush/cleanup run off the render thread. A sibling partial is published only on complete success; cancellation and ordinary shutdown wait for cleanup. Native Windows dialogs are provided by rfd. Download guarantees and limitations are strictly enforced.
 
 ## Native DM and server voice
 

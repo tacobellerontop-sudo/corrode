@@ -71,7 +71,7 @@ impl Camera {
 		let shared = Arc::new(Shared::default());
 		let worker = shared.clone();
 		if thread::Builder::new()
-			.name("corrode-camera".into())
+			.name("solace-camera".into())
 			.spawn(move || {
 				let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
 					run(&worker, device.as_deref(), &on_frame, &wake)

@@ -1,6 +1,6 @@
-#[path = "corrode_sha3.rs"]
-mod corrode_sha3;
-use corrode_sha3::shake256;
+#[path = "solace_sha3.rs"]
+mod solace_sha3;
+use solace_sha3::shake256;
 
 use alloc::{vec, vec::Vec};
 

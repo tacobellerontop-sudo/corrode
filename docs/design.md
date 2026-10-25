@@ -1,112 +1,62 @@
-# Corrode interface direction
+# Solace interface design
 
-Corrode follows the familiar three-column messaging layout and density of a modern desktop chat
-client, and the default dark theme tracks Discord's own neutrals with the Corrode blurple
-accent, softer corner radii and its own server-rail selection language. The palette, typography
-and spacing live in `crates/ui/src/design.rs`; every view resolves colours through
-`design::palette(ui)`.
-
-## Theme tokens and presets
-
-The `Palette` carries surface roles: `base` (title strip and server rail), `sidebar`
-(channel and member lists), `chat`, `raised` (composer, cards, search field, popovers), `hover`,
-`selected`, `border`, `text_strong`/`text`/`muted`, `link`, `accent` (Corrode blurple `#5865f2`),
-presence
-colours, mention colours and an optional two-stop `backdrop` gradient. `canvas` and `surface`
-remain as aliases of `chat` and `sidebar` for older call sites.
-
-A process-wide `Variant` recolours the whole application on top of egui's light/dark preference:
-
-| Preset | Surfaces |
-|---|---|
-| Corrode | House neutrals: dark (`#1e1f22` / `#2b2d31` / `#313338` / `#383a40`) or light (`#dde3ec` / `#eef1f7` / white), following System/Light/Dark |
-| Eclipse | Deep black surfaces for OLED displays |
-| Slate | Lighter blue-grey surfaces (`#1b1f2a` / `#262b38` / `#2c3140`) |
-| Nightfall, Ember, Verdant, Afterglow | Gradient backdrop painted under translucent dark surfaces |
-
-Gradient presets paint a full-window mesh in the background layer each frame and use
-translucent panel fills; they always use dark text. Presets are chosen from the account card's
-settings menu (swatch row) and persist in the application-wide SQLite `theme_variant` row next
-to the light/dark appearance; unknown keys fall back to Corrode. The keys written by earlier
-builds (`onyx`, `ash`, `midnight-blurple`, `crimson-moon`, `forest`, `sunset`) still resolve to
-their renamed presets, so a stored preference survives the rename. `--demo --demo-theme=<key>` and
-`--demo-light` open fixtures in a preset for screenshots.
-
-## Brand mark and server rail
-
-The application mark is the Corrode chat-wave (`assets/brand/`), not a third-party logo. Its
-silhouette is rasterized into the shared icon atlas as `corrode-mark` and painted wherever the
-client identifies itself: the loading screen, the sign-in card and its button, the login header
-and the Direct Messages tile at the top of the server rail.
-
-Server tiles keep one constant rounded-square silhouette instead of morphing between a circle and
-a squircle. Selection and unread state are shown by `notifications::rail_indicator`: a 3px accent
-underline below the tile (wide when selected, narrower on hover), a short neutral tick for unread,
-and a 2px accent ring around the selected tile. Controls use an 8px widget radius and 12px
-window/menu radius, softer than the 4px/8px pair the layout started from.
-
-## Typography
-
-Inter (Regular, Medium, SemiBold; SIL OFL 1.1) leads proportional text; egui's default faces and
-the bundled Noto CJK/Arabic fallbacks follow in every family. egui has no synthetic bold, so
-`design::semibold`/`design::medium` select the heavier families for author names, headings,
-channel names and uppercase 12px eyebrows. Body is 15px, small 12px. Until `fonts::install`
-marks a context, the weight families resolve to the default face so headless tests never
-reference an unknown family.
-
-Text is rasterized by egui on the CPU as grayscale coverage, not by DirectWrite.
-That cannot reproduce ClearType. `design::apply` turns TrueType hinting off and sub-pixel
-binning on. Dark mode remaps coverage with `FontColorTransferFunction::Gamma(0.5)`. Light
-mode leaves the transfer function off. Inter faces set `FontTweak.hinting` to `Some(false)`.
-The bundled faces remain upstream's hinted TrueType builds. See `assets/README.md`.
+Solace is calm and editorial: warm paper surfaces, a sage accent, generous spacing, serif
+titles and soft elevation. Everything is painted by `crates/solace-ui` with epaint primitives
+and rendered on the GPU through wgpu; no stock egui widget chrome is visible (text fields use
+egui's editor with Solace's own frames and colours).
 
 ## Layout
 
-- 36px title strip (`base`): centred context title, session status text and an OFFLINE PREVIEW /
-  EXPERIMENTAL pill. Windows Appearance settings can hide the app strip and use the native title
-  bar and window decorations instead.
-- 72px server rail (`base`): 48px home button and server icons (circle, rounded square when
-  hovered/selected), white edge pill (8px unread, 20px hover, 40px selected), red mention badges.
-- The lists and conversation share one rounded surface beside the rail. Channel sidebar
-  (240px default, resizable): 48px header with the server name, category eyebrows with chevrons,
-  32px rows with `#`/speaker/forum/thread glyphs, `selected`/`hover` fills, unread edge pill,
-  mention badge; DM rows are 44px with 32px avatars. Forum rows open their post archive.
-  Account card at the bottom (`raised`, avatar with presence dot, name, status, settings gear).
-- Conversation header (48px): channel glyph or DM avatar, semibold name, then icon buttons
-  (reload, threads/archive, pins, member list toggle), a 144px search field and DM call/voice
-  controls. A thin notice strip appears only for loading/stale/archive/history states.
-- Timeline: 16px gutters, 40px avatars, content at 72px, medium-weight author names, 12px muted
-  timestamps, `hover` row highlight, date dividers with a centred label, red "New messages"
-  divider, floating hover toolbar (react, reply, edit, more) overlapping the row above.
-- Composer: rounded `raised` bar with attach (+), placeholder `Message #channel`, emoji picker
-  and send icons; a character counter appears within 200 characters of the limit.
-- Member list (240px): ONLINE/OFFLINE eyebrows with counts (DMs show MEMBERS), 42px rows with
-  presence dots, custom status and hover fill; opens a Members window on narrow layouts.
+| Region | Width | Contents |
+|---|---|---|
+| Rail | 80 | Brand mark; Home, Direct messages, Communities, Activity; Settings; your account |
+| Sidebar | 272 (232 when narrow) | Title, search (Ctrl/⌘ K), Communities with the open community's channels, Direct Messages |
+| Conversation | flexible | Header (icon, title, breadcrumb, People/Voice/More), pinned community banner, timeline, composer |
+| Context | 326, hidden below 1180 | Voice Room card, Members, Community info, profile card |
 
-Confirmed empty guild text, announcement and thread histories show a welcome above the
-composer: a circular channel-kind icon, a wrapped semibold channel heading and a short
-description, using the active palette. Loading, unavailable, incomplete and historical
-pages keep their existing status treatment; pending messages suppress the welcome.
-`--features demo -- --demo --demo-empty-channel` previews this state offline;
-`--demo-empty-channel-long` exercises a long Unicode name and `--demo-light` selects light mode.
+The Thread panel floats over the right of the conversation. Below 760 px of height the
+community banner scrolls with the timeline instead of staying pinned.
 
-Icons are [Phosphor Icons](https://phosphoricons.com) 2.1.1 (MIT) in the fill/bold weights,
-rasterized once into `assets/icons/atlas.png` (37 white glyphs in 64px cells) and tinted at
-draw time by `crates/ui/src/icons.rs`; there is no icon font. Provenance and the regeneration
-command are in `assets/icons/README.md`. The profile popout keeps its 300px Discord-style card.
+## Tokens
 
-Voice follows Discord's call screens: a black stage with 80px participant avatars (DM calls,
-above the conversation) or 16:9 tiles with name badges (guild channels), a bottom control bar
-of dark pills (mute with settings chevron, camera, screen share, activities, soundboard, more)
-and a red hang-up button, a green "In a call" badge in the header, mute/deafen toggles in the
-account card, and a "Voice Connected" panel above it while connected. Camera, screen share,
-activities and soundboard are shown disabled: Corrode has no such features.
+`theme.rs` defines two palettes, Paper (light) and Night (dark), selected by egui's theme
+preference (Light, Dark or System; saved with the app's appearance setting).
 
-## Verification notes
+| Token | Paper | Night | Use |
+|---|---|---|---|
+| canvas | `#f8f6f3` | `#18191b` | Conversation background |
+| sidebar / rail | `#f3f1ed` | `#141517` | Navigation |
+| surface | `#ffffff` | `#202124` | Cards, composer, dialogs |
+| surface_alt | `#f0ede9` | `#26272b` | Quiet fills, chips, buttons |
+| text / muted | `#272523` / `#8d8780` | `#ecebe7` / `#8f8b85` | Copy |
+| accent | `#2f6a5a` | `#5ea58c` | Primary actions, links, mentions |
+| online / idle / dnd / listening | `#3ea96c` / `#e9a13b` / `#d4574e` / `#9b82d6` | brighter equivalents | Presence |
 
-Keyboard reachability of channel rows, the forum row, toolbar actions and members is covered
-by headless egui tests. Screen-reader/IME behaviour and Windows rendering (including the inline
-title bar) remain unverified.
-Palette contrast is asserted by a unit test for every opaque preset: body text ≥ 7:1 on `chat`,
-muted text ≥ 4.5:1 on `sidebar`, accent text ≥ 4.5:1 on `accent`. Gradient presets are not
-contrast-certified because their surfaces are translucent.
+Radii: cards 18, list items 12, chips 9, buttons fully round. Cards use a 24 px ambient
+shadow; floating panels a deeper 40 px one.
+
+## Type
+
+- Titles: Source Serif 4 Display (Regular and Semibold), e.g. "Solace", community names,
+  the banner title, card headings.
+- Interface: Inter Regular, Medium and SemiBold.
+- Fallbacks: Noto Sans CJK JP (inflated on first use), Noto Sans Arabic, Noto Sans Math, and
+  system fonts for anything else. Emoji render from the bundled Twemoji atlas.
+
+## Artwork
+
+Community banners, the Voice Room card, the sign-in backdrop and community icons without an
+uploaded image use procedurally rasterized landscapes (`scenery.rs`): layered ridged-noise
+mountains in valley mist, a dawn palette for communities and a sage lake palette for voice
+rooms. Each is generated once per seed and kept as a GPU texture. Avatars without a picture
+use a tinted gradient monogram derived from the user's id.
+
+## Icons
+
+`icons.rs` draws every icon from strokes and fills on a 24-unit grid, so icons stay crisp at
+any scale and inherit palette colours. There is no icon font or atlas.
+
+## Motion
+
+Hover states ease over 120 ms; typing dots and loading indicators animate only while visible
+and request repaints only for as long as they run.

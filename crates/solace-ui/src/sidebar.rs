@@ -444,10 +444,10 @@ fn channel_row(
 	};
 	if response.clicked() {
 		if voice {
-			if in_call != Some(channel.id) {
-				if let Some(command) = state.start_call(channel.id, false) {
-					commands.push(command);
-				}
+			if in_call != Some(channel.id)
+				&& let Some(command) = state.start_call(channel.id, false)
+			{
+				commands.push(command);
 			}
 		} else if let Some(command) = state.select(channel.id) {
 			commands.push(command);

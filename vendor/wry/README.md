@@ -7,7 +7,7 @@
 [![https://good-labs.github.io/greater-good-affirmation/assets/images/badge.svg](https://good-labs.github.io/greater-good-affirmation/assets/images/badge.svg)](https://good-labs.github.io/greater-good-affirmation)
 [![support](https://img.shields.io/badge/sponsor-Open%20Collective-blue.svg)](https://opencollective.com/tauri)
 
-Wry is a WebView rendering library. This is Corrode's scoped fork and targets Windows only,
+Wry is a WebView rendering library. This is Solace's scoped fork and targets Windows only,
 rendering through WebView2.
 
 The webview requires a running event loop and a window type that implements [`HasWindowHandle`].

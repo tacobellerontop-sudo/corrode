@@ -120,7 +120,7 @@ impl AvatarWorker {
 		ctx: egui::Context,
 	) -> Result<Self, &'static str> {
 		let root = dirs::data_local_dir().map(|root| {
-			root.join("Corrode")
+			root.join("Solace")
 				.join("avatars")
 				.join(account.to_string())
 		});
@@ -524,7 +524,7 @@ pub(crate) fn notification_image_path(account: Id, key: &str) -> Option<String> 
 		return None;
 	}
 	let root = dirs::data_local_dir()?;
-	root.join("Corrode")
+	root.join("Solace")
 		.join("avatars")
 		.join(account.to_string())
 		.join(format!("{name}.png"))
@@ -1543,7 +1543,7 @@ mod tests {
 		let bytes = png(256, 256);
 		assert_eq!(decode(&bytes, 128).unwrap().size, [64, 64]);
 		let root = std::env::temp_dir().join(format!(
-			"corrode-avatar-test-{}-{}",
+			"solace-avatar-test-{}-{}",
 			std::process::id(),
 			SystemTime::now()
 				.duration_since(SystemTime::UNIX_EPOCH)

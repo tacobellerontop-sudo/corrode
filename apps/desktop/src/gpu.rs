@@ -65,7 +65,7 @@ pub fn select(
 			format!("no GPU adapter can draw this window; found {available}")
 		});
 	};
-	eprintln!("[Corrode] GPU adapter: {}", describe(&adapter.get_info()));
+	eprintln!("[Solace] GPU adapter: {}", describe(&adapter.get_info()));
 	Ok((*adapter).clone())
 }
 

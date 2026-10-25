@@ -137,7 +137,7 @@ impl Audio {
 			let runtime = runtime.clone();
 			let context = context.clone();
 			std::thread::Builder::new()
-				.name("corrode-attachment-audio".into())
+				.name("solace-attachment-audio".into())
 				.spawn(move || {
 					worker(receiver, status, gate, worker_wake, runtime, context);
 				})
@@ -158,8 +158,8 @@ impl Audio {
 		};
 		let worker = self.worker.as_ref().expect("worker created");
 		if worker.requests.is_closed() {
-			self.status.state = State::Failed("Audio worker stopped; restart Corrode");
-			return Err("Audio worker stopped; restart Corrode");
+			self.status.state = State::Failed("Audio worker stopped; restart Solace");
+			return Err("Audio worker stopped; restart Solace");
 		}
 		worker.requests.send_replace(Some(Request {
 			generation,

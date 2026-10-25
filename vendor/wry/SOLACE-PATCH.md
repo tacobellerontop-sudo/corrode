@@ -5,16 +5,16 @@ The archive records upstream revision `792d0359ba6501a4fc360ece17de2ae42329a47c`
 working tree, so the published registry archive is authoritative, not that Git tree.
 VCS metadata and the upstream license texts are retained.
 
-Corrode now implements Linux authentication directly with GTK4/WebKit6 and is Windows-only. This
+Solace now implements Linux authentication directly with GTK4/WebKit6 and is Windows-only. This
 fork keeps only the Windows WebView2 backend: it drops the WKWebView (macOS/iOS), Android and
 GTK/WebKit2GTK backend sources, their target-specific dependency declarations, and the associated
 `cfg(target_os = ...)`, `cfg(target_vendor = "apple")` and `cfg(gtk)` branches. The build script
 explicitly rejects targets other than Windows. No Windows backend implementation is changed.
 The unused upstream dev dependencies and example declarations are omitted, along with examples and
-the upstream lockfile; Corrode's workspace lockfile is used.
+the upstream lockfile; Solace's workspace lockfile is used.
 This fork is not a general replacement for upstream Wry and does not claim macOS, mobile or BSD support.
 
-Merely target-gating upstream Wry in Corrode does not remove its old target dependencies from
+Merely target-gating upstream Wry in Solace does not remove its old target dependencies from
 Cargo.lock. This is a real Linux backend replacement, not an advisory ignore or package-version
 relabeling. Preserve the MIT/Apache-2.0 notices in binary packages. Remove this fork when a
 compatible released Wry eliminates the old bindings or permits their complete exclusion.

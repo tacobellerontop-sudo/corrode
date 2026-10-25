@@ -46,10 +46,10 @@ pub enum Status {
 impl Status {
 	pub fn label(self) -> &'static str {
 		match self {
-			Self::Disabled => "System notifications are off in Corrode settings.",
+			Self::Disabled => "System notifications are off in Solace settings.",
 			Self::Enabling => "Checking system notification permission…",
 			Self::Ready => {
-				"Corrode can send system notifications; message alerts show sender and preview."
+				"Solace can send system notifications; message alerts show sender and preview."
 			}
 			Self::Denied => "System notifications are disabled in your OS settings.",
 			Self::QueueFull => {
@@ -121,7 +121,7 @@ impl Notifications {
 			let wake = Arc::clone(&self.wake);
 			let activated = self.activation_send.clone();
 			if std::thread::Builder::new()
-				.name("corrode-notifications".into())
+				.name("solace-notifications".into())
 				.spawn(move || worker(receive, current, status, wake, activated))
 				.is_err()
 			{
@@ -168,7 +168,7 @@ impl Notifications {
 	/// Queue a privacy-preserving generic alert. False means disabled, unavailable or overloaded.
 	pub fn notify(&self) -> bool {
 		self.enqueue(Alert {
-			title: "Corrode".into(),
+			title: "Solace".into(),
 			body: GENERIC_BODY.into(),
 			image_path: None,
 		})
@@ -354,7 +354,7 @@ fn publish(status: &AtomicU64, generation: u64, outcome: Status) {
 fn authorize() -> Status {
 	use windows::{UI::Notifications::ToastNotificationManager, core::HSTRING};
 	let notifier = ToastNotificationManager::CreateToastNotifierWithId(&HSTRING::from(
-		"cz.viceverse.corrode",
+		"app.solace.desktop",
 	));
 	match notifier {
 		Ok(notifier) => windows_setting_status(notifier.Setting(), windows_shortcut_exists()),
@@ -382,14 +382,14 @@ fn windows_setting_status(
 fn windows_shortcut_exists() -> bool {
 	std::env::var_os("APPDATA").is_some_and(|root| {
 		std::path::PathBuf::from(root)
-			.join("Microsoft/Windows/Start Menu/Programs/Corrode.lnk")
+			.join("Microsoft/Windows/Start Menu/Programs/Solace.lnk")
 			.is_file()
 	})
 }
 
 fn show(alert: &Alert, activation: Activation) -> Result<NotificationHandle, ()> {
 	use tauri_winrt_notification::{IconCrop, Toast};
-	let mut toast = Toast::new("cz.viceverse.corrode")
+	let mut toast = Toast::new("app.solace.desktop")
 		.title(&alert.title)
 		.text1(&alert.body)
 		.on_activated(move |_| {
@@ -413,7 +413,7 @@ fn show(alert: &Alert, activation: Activation) -> Result<NotificationHandle, ()>
 fn notification(alert: &Alert) -> notify_rust::Notification {
 	let mut notification = notify_rust::Notification::new();
 	notification
-		.appname("Corrode")
+		.appname("Solace")
 		.summary(&alert.title)
 		.body(&alert.body)
 		.timeout(5_000);
@@ -430,7 +430,7 @@ fn close(outstanding: &mut Option<NotificationHandle>) {
 	if outstanding.take().is_some() {
 		use windows::{UI::Notifications::ToastNotificationManager, core::HSTRING};
 		let _ = ToastNotificationManager::History()
-			.and_then(|history| history.ClearWithId(&HSTRING::from("cz.viceverse.corrode")));
+			.and_then(|history| history.ClearWithId(&HSTRING::from("app.solace.desktop")));
 	}
 }
 
@@ -498,11 +498,11 @@ mod tests {
 	#[test]
 	fn disabled_is_lazy_and_fixed_queue_is_bounded_and_invalidated() {
 		let alert = notification(&Alert {
-			title: "Corrode".into(),
+			title: "Solace".into(),
 			body: GENERIC_BODY.into(),
 			image_path: None,
 		});
-		assert_eq!(alert.summary, "Corrode");
+		assert_eq!(alert.summary, "Solace");
 		assert_eq!(alert.body, "You have a new message.");
 		let mut notifications = Notifications::new(|| {});
 		assert_eq!(notifications.status(), Status::Disabled);

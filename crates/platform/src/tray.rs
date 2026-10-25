@@ -84,7 +84,7 @@ mod native {
 			// SAFETY: the retained winit window owns hwnd. Hooks must run on its UI thread.
 			let previous = unsafe {
 				if GetWindowThreadProcessId(hwnd, None) != GetCurrentThreadId()
-					|| !GetPropW(hwnd, w!("Corrode.TrayState")).is_invalid()
+					|| !GetPropW(hwnd, w!("Solace.TrayState")).is_invalid()
 				{
 					return Err(UNAVAILABLE);
 				}
@@ -97,7 +97,7 @@ mod native {
 			// SAFETY: these fixed names register messages, without taking ownership of pointers.
 			let (notification, restart) = unsafe {
 				(
-					RegisterWindowMessageW(w!("Corrode.TrayCallback")),
+					RegisterWindowMessageW(w!("Solace.TrayCallback")),
 					RegisterWindowMessageW(w!("TaskbarCreated")),
 				)
 			};
@@ -130,7 +130,7 @@ mod native {
 				},
 				..Default::default()
 			};
-			for (slot, unit) in data.szTip.iter_mut().zip("Corrode".encode_utf16()) {
+			for (slot, unit) in data.szTip.iter_mut().zip("Solace".encode_utf16()) {
 				*slot = unit;
 			}
 			let tray = Self {
@@ -149,13 +149,13 @@ mod native {
 			};
 			// SAFETY: menu and hwnd are live UI-thread handles; Rc keeps callback state stable.
 			unsafe {
-				AppendMenuW(menu, MF_STRING, SHOW, w!("Show Corrode")).map_err(|_| UNAVAILABLE)?;
+				AppendMenuW(menu, MF_STRING, SHOW, w!("Show Solace")).map_err(|_| UNAVAILABLE)?;
 				AppendMenuW(menu, MF_STRING, QUIT, w!("Quit")).map_err(|_| UNAVAILABLE)?;
 				SetMenuDefaultItem(menu, SHOW as u32, 0).map_err(|_| UNAVAILABLE)?;
 				let reference = Rc::into_raw(tray.state.clone());
 				if SetPropW(
 					hwnd,
-					w!("Corrode.TrayState"),
+					w!("Solace.TrayState"),
 					Some(HANDLE(reference.cast_mut().cast())),
 				)
 				.is_err()
@@ -164,7 +164,7 @@ mod native {
 					return Err(UNAVAILABLE);
 				}
 				if SetWindowLongPtrW(hwnd, GWLP_WNDPROC, callback as *const () as isize) == 0 {
-					let _ = RemovePropW(hwnd, w!("Corrode.TrayState"));
+					let _ = RemovePropW(hwnd, w!("Solace.TrayState"));
 					drop(Rc::from_raw(reference));
 					return Err(UNAVAILABLE);
 				}
@@ -263,7 +263,7 @@ mod native {
 						) != 0
 					{
 						self.state.hooked.set(false);
-						let _ = RemovePropW(hwnd, w!("Corrode.TrayState"));
+						let _ = RemovePropW(hwnd, w!("Solace.TrayState"));
 						drop(Rc::from_raw(Rc::as_ptr(&self.state)));
 					}
 				}
@@ -286,7 +286,7 @@ mod native {
 		lparam: LPARAM,
 	) -> LRESULT {
 		// SAFETY: the UI-thread registration installed this property before replacing WNDPROC.
-		let pointer = unsafe { GetPropW(hwnd, w!("Corrode.TrayState")).0.cast::<State>() };
+		let pointer = unsafe { GetPropW(hwnd, w!("Solace.TrayState")).0.cast::<State>() };
 		if pointer.is_null() {
 			// SAFETY: no owned state is accessible; use the OS default rather than a stale pointer.
 			return unsafe { DefWindowProcW(hwnd, message, wparam, lparam) };
@@ -319,7 +319,7 @@ mod native {
 			let hooked = state.hooked.replace(false);
 			state.remove_icon();
 			// SAFETY: remove only our property as the window is destroyed.
-			let _ = unsafe { RemovePropW(hwnd, w!("Corrode.TrayState")) };
+			let _ = unsafe { RemovePropW(hwnd, w!("Solace.TrayState")) };
 			if hooked {
 				// SAFETY: the destroyed window cannot dispatch again; release its registration Rc.
 				unsafe {
@@ -347,7 +347,7 @@ mod native {
 				event_loop
 					.create_window(
 						winit::window::Window::default_attributes()
-							.with_title("Corrode synthetic tray test")
+							.with_title("Solace synthetic tray test")
 							.with_inner_size(winit::dpi::LogicalSize::new(320., 200.))
 							.with_visible(false),
 					)
@@ -384,7 +384,7 @@ mod native {
 				assert!(IsWindowVisible(hwnd).as_bool());
 				drop(tray);
 				assert!(IsWindowVisible(hwnd).as_bool());
-				assert!(GetPropW(hwnd, w!("Corrode.TrayState")).is_invalid());
+				assert!(GetPropW(hwnd, w!("Solace.TrayState")).is_invalid());
 				assert_ne!(
 					GetWindowLongPtrW(hwnd, GWLP_WNDPROC),
 					callback as *const () as isize

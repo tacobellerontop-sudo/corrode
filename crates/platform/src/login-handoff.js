@@ -1,9 +1,9 @@
-// Runs only in Corrode's newly-created ephemeral authentication webview.
+// Runs only in Solace's newly-created ephemeral authentication webview.
 // Observe its own same-origin API Authorization header after the owner logs in.
 // Discord still performs the entire authentication/challenge/QR flow.
 (() => {
   if (window !== window.top || location.origin !== "https://discord.com") return;
-  const capability = "__CORRODE_LOGIN_CAPABILITY__";
+  const capability = "__SOLACE_LOGIN_CAPABILITY__";
   let delivered = false;
   const opened = Date.now();
   const allowed = value => {

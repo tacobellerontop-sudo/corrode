@@ -49,8 +49,8 @@ From the RFC:
 This crate does not implement the cryptographic primitives itself.
 Instead it expects an implementation of the [HpkeCrypto] trait.
 
-This Corrode vendor patch retains only the RustCrypto backend declaration; see
-[CORRODE-PATCH.md](CORRODE-PATCH.md). Upstream also offers a libcrux backend.
+This Solace vendor patch retains only the RustCrypto backend declaration; see
+[SOLACE-PATCH.md](SOLACE-PATCH.md). Upstream also offers a libcrux backend.
 
 - [RustCrypto backend]: a backend using well established crypto implementations
 

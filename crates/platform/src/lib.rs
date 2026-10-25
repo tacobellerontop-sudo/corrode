@@ -24,10 +24,10 @@ use wry::{WebView, WebViewBuilder};
 
 /// Logical height of the native header the desktop app draws above the login webview.
 pub const LOGIN_HEADER_HEIGHT: f32 = 56.0;
-const SERVICE: &str = "cz.viceverse.corrode";
-/// Pre-rebrand credential service. Read once as a fallback so a fork keeps
-/// existing OS-keychain logins; all new writes go to [`SERVICE`].
-const LEGACY_SERVICE: &str = "cz.viceverse.serein";
+const SERVICE: &str = "app.solace.desktop";
+/// Pre-rebrand credential services (Corrode, then Serein). Read as a fallback so existing
+/// OS-keychain logins survive the rename; all new writes go to [`SERVICE`].
+const LEGACY_SERVICES: [&str; 2] = ["cz.viceverse.corrode", "cz.viceverse.serein"];
 const ACCOUNT: &str = "discord-session";
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CredentialError {
@@ -67,7 +67,14 @@ fn load_entry(name: &str) -> Result<Option<SessionSecret>, CredentialError> {
 		Some(secret) => Ok(Some(secret)),
 		// Fall back to the pre-rebrand service once; a successful save
 		// later migrates the secret to the new service.
-		None => read_service_entry(LEGACY_SERVICE, name),
+		None => {
+			for service in LEGACY_SERVICES {
+				if let Some(secret) = read_service_entry(service, name)? {
+					return Ok(Some(secret));
+				}
+			}
+			Ok(None)
+		}
 	}
 }
 fn read_service_entry(
@@ -89,7 +96,7 @@ fn save_entry(name: &str, secret: &SessionSecret) -> Result<(), CredentialError>
 		.map_err(|_| CredentialError::Unavailable)
 }
 fn forget_entry(name: &str) -> Result<(), CredentialError> {
-	for service in [SERVICE, LEGACY_SERVICE] {
+	for service in std::iter::once(SERVICE).chain(LEGACY_SERVICES) {
 		match keyring::Entry::new(service, name).and_then(|entry| entry.delete_credential()) {
 			Ok(()) | Err(keyring::Error::NoEntry) => {}
 			Err(_) => return Err(CredentialError::Unavailable),
@@ -130,7 +137,7 @@ impl LoginView {
 			.collect::<String>()
 			+ ":";
 		let script =
-			include_str!("login-handoff.js").replace("__CORRODE_LOGIN_CAPABILITY__", &capability);
+			include_str!("login-handoff.js").replace("__SOLACE_LOGIN_CAPABILITY__", &capability);
 		let builder = WebViewBuilder::new()
 			.with_url("https://discord.com/login")
 			.with_incognito(true)

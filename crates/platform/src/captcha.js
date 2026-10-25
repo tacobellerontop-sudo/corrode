@@ -1,7 +1,7 @@
 (() => {
   "use strict";
-  if (window !== window.top || !["https://corrode-captcha.verification.invalid/", "corrode-captcha://verification.invalid/"].includes(location.href)) return;
-  const config = __CORRODE_CAPTCHA_CONFIG__;
+  if (window !== window.top || !["https://solace-captcha.verification.invalid/", "solace-captcha://verification.invalid/"].includes(location.href)) return;
+  const config = __SOLACE_CAPTCHA_CONFIG__;
   let finished = false;
   document.addEventListener("keydown", event => {
     if (event.key === "Escape") send("cancelled");
@@ -18,7 +18,7 @@
       status.textContent = "Verification could not load. Close this window and try again, or open the invite in Discord.";
       send("error");
     };
-    window.CORRODECaptchaLoaded = () => {
+    window.SOLACECaptchaLoaded = () => {
       try {
         const widget = window.hcaptcha.render("captcha", {
           sitekey: config.sitekey,
@@ -26,7 +26,7 @@
           size: config.invisible ? "invisible" : (window.innerWidth < 330 ? "compact" : "normal"),
           callback: value => {
             if (typeof value !== "string" || value.length < 1 || value.length > 8192 || !/^[\x21-\x7e]+$/.test(value)) return fail();
-            status.textContent = "Verified. Returning to Corrode…";
+            status.textContent = "Verified. Returning to Solace…";
             send("verified", value);
           },
           "expired-callback": () => send("expired"),
@@ -49,7 +49,7 @@
       } catch (_) { fail(); }
     };
     const script = document.createElement("script");
-    script.src = `https://js.hcaptcha.com/1/api.js?onload=CORRODECaptchaLoaded&render=explicit&recaptchacompat=off&host=${config.sitekey}.react-native.hcaptcha.com`;
+    script.src = `https://js.hcaptcha.com/1/api.js?onload=SOLACECaptchaLoaded&render=explicit&recaptchacompat=off&host=${config.sitekey}.react-native.hcaptcha.com`;
     script.async = true;
     script.onerror = fail;
     document.head.appendChild(script);

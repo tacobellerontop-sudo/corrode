@@ -2163,7 +2163,7 @@ mod tests {
 			// Wait until the client has reached Ready.
 			ready_rx.await.unwrap();
 
-			// Bob departs (leaves the DM call). Corrode is now the sole member.
+			// Bob departs (leaves the DM call). Solace is now the sole member.
 			ws.send(Message::Text(
 				json!({"op":13,"d":{"user_id":"2"}}).to_string().into(),
 			))

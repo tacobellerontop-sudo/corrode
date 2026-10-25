@@ -1,5 +1,5 @@
-; Corrode Windows Installer Script (NSIS Modern UI 2)
-; Installs per-user to $LOCALAPPDATA\Programs\Corrode without elevation
+; Solace Windows Installer Script (NSIS Modern UI 2)
+; Installs per-user to $LOCALAPPDATA\Programs\Solace without elevation
 ; Preserves write permissions for seamless in-app autoupdates
 
 Unicode True
@@ -11,11 +11,11 @@ SetCompressor /SOLID lzma
 !include "LogicLib.nsh"
 !include "x64.nsh"
 
-!define PRODUCT_NAME "Corrode"
-!define PRODUCT_PUBLISHER "Corrode contributors"
+!define PRODUCT_NAME "Solace"
+!define PRODUCT_PUBLISHER "Solace contributors"
 ; Fork: no upstream repository is linked. Set this to your own site or leave it empty.
 !define PRODUCT_WEB_SITE ""
-!define APP_EXE "corrode.exe"
+!define APP_EXE "solace.exe"
 
 !ifndef VERSION
   !define VERSION "0.1.0"
@@ -38,22 +38,22 @@ SetCompressor /SOLID lzma
 !endif
 
 Name "${PRODUCT_NAME} ${VERSION}"
-OutFile "${OUTPUT_DIR}\corrode-${VERSION}-setup.exe"
-InstallDir "$LOCALAPPDATA\Programs\Corrode"
+OutFile "${OUTPUT_DIR}\solace-${VERSION}-setup.exe"
+InstallDir "$LOCALAPPDATA\Programs\Solace"
 InstallDirRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_NAME}" "InstallLocation"
 
-!if /FileExists "packaging\windows\Corrode.ico"
-  !define MUI_ICON "packaging\windows\Corrode.ico"
-  !define MUI_UNICON "packaging\windows\Corrode.ico"
-!else if /FileExists "${__FILEDIR__}\Corrode.ico"
-  !define MUI_ICON "${__FILEDIR__}\Corrode.ico"
-  !define MUI_UNICON "${__FILEDIR__}\Corrode.ico"
-!else if /FileExists "Corrode.ico"
-  !define MUI_ICON "Corrode.ico"
-  !define MUI_UNICON "Corrode.ico"
+!if /FileExists "packaging\windows\Solace.ico"
+  !define MUI_ICON "packaging\windows\Solace.ico"
+  !define MUI_UNICON "packaging\windows\Solace.ico"
+!else if /FileExists "${__FILEDIR__}\Solace.ico"
+  !define MUI_ICON "${__FILEDIR__}\Solace.ico"
+  !define MUI_UNICON "${__FILEDIR__}\Solace.ico"
+!else if /FileExists "Solace.ico"
+  !define MUI_ICON "Solace.ico"
+  !define MUI_UNICON "Solace.ico"
 !else
-  !define MUI_ICON "${__FILEDIR__}\Corrode.ico"
-  !define MUI_UNICON "${__FILEDIR__}\Corrode.ico"
+  !define MUI_ICON "${__FILEDIR__}\Solace.ico"
+  !define MUI_UNICON "${__FILEDIR__}\Solace.ico"
 !endif
 
 !define MUI_ABORTWARNING
@@ -81,10 +81,10 @@ Function .onInit
   ${EndIf}
 
   ${Do}
-    nsExec::Exec 'powershell -NoProfile -NonInteractive -Command "if (Get-Process corrode -ErrorAction SilentlyContinue) { exit 1 } else { exit 0 }"'
+    nsExec::Exec 'powershell -NoProfile -NonInteractive -Command "if (Get-Process solace -ErrorAction SilentlyContinue) { exit 1 } else { exit 0 }"'
     Pop $0
     ${If} $0 != 0
-      MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "${PRODUCT_NAME} is currently running. Please close Corrode before continuing." IDRETRY retry_init IDCANCEL cancel_init
+      MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "${PRODUCT_NAME} is currently running. Please close Solace before continuing." IDRETRY retry_init IDCANCEL cancel_init
       retry_init:
         ${Continue}
       cancel_init:
@@ -135,10 +135,10 @@ Function un.onInit
   ${EndIf}
 
   ${Do}
-    nsExec::Exec 'powershell -NoProfile -NonInteractive -Command "if (Get-Process corrode -ErrorAction SilentlyContinue) { exit 1 } else { exit 0 }"'
+    nsExec::Exec 'powershell -NoProfile -NonInteractive -Command "if (Get-Process solace -ErrorAction SilentlyContinue) { exit 1 } else { exit 0 }"'
     Pop $0
     ${If} $0 != 0
-      MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "${PRODUCT_NAME} is currently running. Please close Corrode before uninstalling." IDRETRY retry_uninit IDCANCEL cancel_uninit
+      MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "${PRODUCT_NAME} is currently running. Please close Solace before uninstalling." IDRETRY retry_uninit IDCANCEL cancel_uninit
       retry_uninit:
         ${Continue}
       cancel_uninit:

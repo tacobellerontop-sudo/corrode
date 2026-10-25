@@ -4,9 +4,9 @@ use model::{KeyChord, KeybindAction, Keybinds};
 
 const READY: &str = "Global voice keybinds are enabled.";
 const UNAVAILABLE: &str =
-	"Global voice keybinds are unavailable on this system; they work while Corrode is focused.";
-const INVALID: &str = "One or more voice bindings cannot be registered globally; they still work while Corrode is focused.";
-const MODIFIER_REQUIRED: &str = "Add Ctrl, Alt, Shift, or Command to use a voice binding globally; it still works while Corrode is focused.";
+	"Global voice keybinds are unavailable on this system; they work while Solace is focused.";
+const INVALID: &str = "One or more voice bindings cannot be registered globally; they still work while Solace is focused.";
+const MODIFIER_REQUIRED: &str = "Add Ctrl, Alt, Shift, or Command to use a voice binding globally; it still works while Solace is focused.";
 
 const PUSH_TO_TALK: usize = 0;
 const TOGGLE_MUTE: usize = 1;

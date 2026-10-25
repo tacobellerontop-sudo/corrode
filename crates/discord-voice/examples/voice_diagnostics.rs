@@ -149,7 +149,7 @@ fn main() {
 	assert!(
 		std::str::from_utf8(&output)
 			.unwrap()
-			.starts_with("[Corrode voice Audio]")
+			.starts_with("[Solace voice Audio]")
 	);
 	assert!(
 		!std::str::from_utf8(&output)

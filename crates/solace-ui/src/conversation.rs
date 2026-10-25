@@ -215,12 +215,9 @@ fn header_bar(
 		.as_ref()
 		.is_some_and(|c| c.channel == channel.id);
 	let callable = state.can_call(channel.id);
-	let voice_target = if channel.guild.is_some() {
-		nav::voice_rooms(state, channel.guild.unwrap())
-			.first()
-			.map(|c| c.id)
-	} else {
-		callable.then_some(channel.id)
+	let voice_target = match channel.guild {
+		Some(guild) => nav::voice_rooms(state, guild).first().map(|c| c.id),
+		None => callable.then_some(channel.id),
 	};
 	let label = if call_active {
 		"Leave call"
@@ -489,11 +486,11 @@ fn timeline_view(
 		let mut y = 0.0;
 		for (row, height) in rows.iter().zip(&heights) {
 			let row_rect = Rect::from_min_size(origin + vec2(0.0, y), vec2(width, *height));
-			if y + height >= viewport.min.y - 200.0 && y <= viewport.max.y + 200.0 {
-				if let Some(id) = paint_row(solace, ui, state, commands, row, row_rect, &replies, p)
-				{
-					hovered_message = Some(id);
-				}
+			if y + height >= viewport.min.y - 200.0
+				&& y <= viewport.max.y + 200.0
+				&& let Some(id) = paint_row(solace, ui, state, commands, row, row_rect, &replies, p)
+			{
+				hovered_message = Some(id);
 			}
 			y += height;
 		}
@@ -1284,17 +1281,15 @@ fn layout_message(
 							);
 						}
 					}
-					(None, Some(name)) => {
-						if !crate::emoji::paint(ui.painter(), emoji_rect, name) {
-							paint::label(
-								ui.painter(),
-								emoji_rect.center(),
-								Align2::CENTER_CENTER,
-								name,
-								theme::sans(13.0),
-								p.text,
-							);
-						}
+					(None, Some(name)) if !crate::emoji::paint(ui.painter(), emoji_rect, name) => {
+						paint::label(
+							ui.painter(),
+							emoji_rect.center(),
+							Align2::CENTER_CENTER,
+							name,
+							theme::sans(13.0),
+							p.text,
+						);
 					}
 					_ => {}
 				}
@@ -1661,9 +1656,7 @@ fn paint_row(
 			None
 		}
 		Row::Pending(index) => {
-			let Some(pending) = state.pending.get(*index) else {
-				return None;
-			};
+			let pending = state.pending.get(*index)?;
 			let style = Style {
 				color: p.muted,
 				..Style::body(p)

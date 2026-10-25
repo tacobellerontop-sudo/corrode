@@ -178,7 +178,7 @@ pub fn compact(n: u64) -> String {
 }
 
 /// Presence status for a user from DM presences or the open member list.
-pub fn status_of<'a>(state: &'a State, user: Id) -> Option<&'a str> {
+pub fn status_of(state: &State, user: Id) -> Option<&str> {
 	if let Some(presence) = state.presence_for(user) {
 		return presence.status.as_deref();
 	}

@@ -214,6 +214,11 @@ impl Solace {
 		(self.accounts, self.theme, self.demo, self.toasts) = keep;
 	}
 
+	/// Open the settings dialog on a page.
+	pub fn open_settings(&mut self, page: SettingsPage) {
+		self.settings = Some(page);
+	}
+
 	/// Show the thread panel for a message (or close it with `None`).
 	pub fn open_thread(&mut self, message: Option<Id>) {
 		self.thread = message;

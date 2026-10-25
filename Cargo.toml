@@ -182,7 +182,7 @@ opt-level = 3
 [patch.crates-io]
 # Replace an affected SHAKE dependency while retaining the compatible HPKE API.
 hpke-rs = { path = "vendor/hpke-rs" }
-# Native DAVE does not need OpenMLS browser timers; see vendor/davey/CORRODE-PATCH.md.
+# Native DAVE does not need OpenMLS browser timers; see vendor/davey/SOLACE-PATCH.md.
 davey = { path = "vendor/davey" }
 
 # Scoped fork of Wry carrying only the Windows WebView2 backend.

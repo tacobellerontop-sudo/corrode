@@ -158,7 +158,7 @@ impl Downloads {
 		let context = context.clone();
 		// One dedicated owner keeps all file work and cleanup away from the render/runtime threads.
 		let spawn = std::thread::Builder::new()
-			.name("corrode-download".into())
+			.name("solace-download".into())
 			.spawn(move || {
 				if let Some(previous) = previous {
 					let _ = previous.join();
@@ -308,7 +308,7 @@ impl CopyFile {
 		let mut random = [0u8; 16];
 		getrandom::fill(&mut random).map_err(|_| "Temporary file unavailable")?;
 		let suffix: String = random.iter().map(|byte| format!("{byte:02x}")).collect();
-		let root = std::env::temp_dir().join(format!("corrode-clipboard-{suffix}"));
+		let root = std::env::temp_dir().join(format!("solace-clipboard-{suffix}"));
 		let directory = fs::DirBuilder::new();
 		directory
 			.create(&root)
@@ -434,7 +434,7 @@ impl<'a> Partial<'a> {
 		let mut random = [0u8; 16];
 		getrandom::fill(&mut random).map_err(|_| "Temporary file unavailable")?;
 		let random: String = random.iter().map(|b| format!("{b:02x}")).collect();
-		let path = parent.join(format!(".Corrode-{random}.partial"));
+		let path = parent.join(format!(".Solace-{random}.partial"));
 		let mut options = OpenOptions::new();
 		options.write(true).create_new(true);
 		let file = options
@@ -955,7 +955,7 @@ mod tests {
 			assert!(original_url(&image).is_none());
 		}
 		let root =
-			std::env::temp_dir().join(format!("corrode-download-tests-{}", std::process::id()));
+			std::env::temp_dir().join(format!("solace-download-tests-{}", std::process::id()));
 		fs::create_dir_all(&root).unwrap();
 		let destination = root.join("chosen.bin");
 		let client = reqwest::Client::builder()
