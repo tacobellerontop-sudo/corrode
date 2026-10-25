@@ -242,7 +242,7 @@ fn package() -> Result<(), String> {
 		"--release",
 		"--locked",
 		"-p",
-		"Solace",
+		"solace",
 		"--no-default-features",
 	];
 	run(&arguments)?;
@@ -373,7 +373,7 @@ fn main() -> ExitCode {
 					])
 				})
 				.and_then(|_| run(&["test", "--workspace", "--locked"]))
-				.and_then(|_| run(&["check", "-p", "Solace", "--no-default-features", "--locked"]))
+				.and_then(|_| run(&["check", "-p", "solace", "--no-default-features", "--locked"]))
 				.and_then(|_| policy()),
 			"policy" => policy(),
 			"licenses" => licenses(),
