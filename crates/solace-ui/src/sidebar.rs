@@ -277,11 +277,16 @@ fn communities(
 			ui.painter()
 				.circle_filled(rect.right_center() - vec2(14.0, 0.0), 4.0, p.accent);
 		}
+		let mut selected = selected;
 		if response.clicked() {
-			if let Some(command) = state.select_guild(guild.id) {
+			if selected {
+				// Clicking the open community again closes it: its channels fold away
+				// and the conversation pane returns to the welcome view.
+				state.open_home();
+				selected = false;
+			} else if let Some(command) = state.select_guild(guild.id) {
 				commands.push(command);
-			} else if !selected
-				&& let Some(channel) = nav::landing(state, guild.id)
+			} else if let Some(channel) = nav::landing(state, guild.id)
 				&& let Some(command) = state.select(channel)
 			{
 				commands.push(command);

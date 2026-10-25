@@ -103,3 +103,42 @@ fn drafts_request_a_save_after_they_change() {
 	solace.sync_draft(&state);
 	assert_eq!(solace.take_requests(), vec![Request::SaveDraft(channel)]);
 }
+
+#[test]
+fn clicking_the_open_community_again_closes_it() {
+	let ctx = egui::Context::default();
+	install(&ctx).unwrap();
+	let mut solace = Solace::default();
+	let mut state = test_support::demo_state();
+	let guild = state.guilds[0].id;
+	let _ = state.select(nav::landing(&state, guild).unwrap());
+	let size = egui::vec2(1400.0, 900.0);
+	// The first community row sits under the "Communities" header in the sidebar.
+	let row = egui::pos2(theme::size::RAIL + 140.0, 128.0 + 34.0 + 28.0);
+	let mut run = |events: Vec<egui::Event>, state: &mut client_core::State| {
+		let input = egui::RawInput {
+			screen_rect: Some(Rect::from_min_size(egui::Pos2::ZERO, size)),
+			events,
+			..Default::default()
+		};
+		let mut output = ctx.run_ui(input, |ui| {
+			let _ = solace.show(ui, state);
+		});
+		output.textures_delta.clear();
+	};
+	let click = |pressed| egui::Event::PointerButton {
+		pos: row,
+		button: egui::PointerButton::Primary,
+		pressed,
+		modifiers: Default::default(),
+	};
+	run(vec![egui::Event::PointerMoved(row)], &mut state);
+	run(vec![click(true)], &mut state);
+	run(vec![click(false)], &mut state);
+	assert_eq!(state.selected, None, "the open community closes");
+	assert!(nav::selected_guild(&state).is_none());
+	// Clicking it again reopens the community.
+	run(vec![click(true)], &mut state);
+	run(vec![click(false)], &mut state);
+	assert_eq!(nav::selected_guild(&state).map(|g| g.id), Some(guild));
+}
