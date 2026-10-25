@@ -195,6 +195,81 @@ pub fn custom_status_of(state: &State, user: Id) -> Option<&str> {
 		.filter(|s| !s.is_empty())
 }
 
+/// Recently active conversations across communities and direct messages, newest first:
+/// every direct conversation, plus community channels you opened or that have unread news.
+pub fn recent(state: &State, limit: usize) -> Vec<&Channel> {
+	let mut channels: Vec<&Channel> = state
+		.channels
+		.iter()
+		.filter(|c| state.can_view(c.id))
+		.filter(|c| {
+			is_dm(c)
+				|| (is_text(c.kind)
+					&& c.guild.is_some()
+					&& (state.last_viewed_channels.iter().any(|(_, id)| *id == c.id)
+						|| channel_unread(state, c)))
+		})
+		.collect();
+	channels.sort_by_key(|c| std::cmp::Reverse(c.last_message.unwrap_or(Id(0))));
+	channels.truncate(limit);
+	channels
+}
+
+/// Voice rooms with people in them right now, busiest first.
+pub fn live_rooms(state: &State) -> Vec<(&Channel, Vec<Id>)> {
+	let mut rooms: Vec<(&Channel, Vec<Id>)> = Vec::new();
+	for entry in &state.voice.roster {
+		let Some(channel) = state.channel(entry.channel) else {
+			continue;
+		};
+		match rooms.iter_mut().find(|(c, _)| c.id == channel.id) {
+			Some((_, people)) => people.push(entry.participant.user),
+			None => rooms.push((channel, vec![entry.participant.user])),
+		}
+	}
+	rooms.sort_by_key(|(_, people)| std::cmp::Reverse(people.len()));
+	rooms
+}
+
+/// Friends and direct-message contacts who are online, with their status.
+pub fn online_people(state: &State) -> Vec<(model::User, String)> {
+	let mut people: Vec<(model::User, String)> = Vec::new();
+	let candidates = state.friends().cloned().chain(
+		state
+			.channels
+			.iter()
+			.filter(|c| c.guild.is_none() && c.kind == 1)
+			.flat_map(|c| c.recipients.iter().cloned()),
+	);
+	for user in candidates {
+		if people.iter().any(|(u, _)| u.id == user.id) {
+			continue;
+		}
+		if let Some(status) = state
+			.presence_for(user.id)
+			.and_then(|p| p.status.clone())
+			.filter(|s| s != "offline")
+		{
+			people.push((user, status));
+		}
+	}
+	people.sort_by_key(|(_, status)| match status.as_str() {
+		"online" => 0,
+		"dnd" => 1,
+		_ => 2,
+	});
+	people
+}
+
+/// The direct conversation with `user`, if one exists.
+pub fn dm_with(state: &State, user: Id) -> Option<Id> {
+	state
+		.channels
+		.iter()
+		.find(|c| c.guild.is_none() && c.kind == 1 && c.recipients.iter().any(|r| r.id == user))
+		.map(|c| c.id)
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;

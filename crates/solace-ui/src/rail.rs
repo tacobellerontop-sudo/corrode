@@ -69,6 +69,10 @@ pub fn show(solace: &mut Solace, ui: &mut Ui, state: &mut State, _commands: &mut
 		}
 		if response.clicked() {
 			solace.pane = pane;
+			// Home always lands on the dashboard.
+			if pane == Pane::Home {
+				state.open_home();
+			}
 		}
 		y += 56.0;
 	}

@@ -16,6 +16,7 @@ pub mod theme;
 mod aside;
 mod composer;
 mod conversation;
+mod dashboard;
 mod overlays;
 mod rail;
 mod sidebar;
@@ -241,7 +242,8 @@ impl Solace {
 		}
 
 		let width = full.width();
-		let aside = self.aside_open && width >= 1180.0;
+		// The dashboard uses the full width; the context column belongs to a conversation.
+		let aside = self.aside_open && width >= 1180.0 && state.selected.is_some();
 		let sidebar_w = if width < 900.0 {
 			232.0
 		} else {

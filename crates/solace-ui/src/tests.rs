@@ -108,7 +108,10 @@ fn drafts_request_a_save_after_they_change() {
 fn clicking_the_open_community_again_closes_it() {
 	let ctx = egui::Context::default();
 	install(&ctx).unwrap();
-	let mut solace = Solace::default();
+	let mut solace = Solace {
+		pane: Pane::Explore,
+		..Solace::default()
+	};
 	let mut state = test_support::demo_state();
 	let guild = state.guilds[0].id;
 	let _ = state.select(nav::landing(&state, guild).unwrap());
@@ -141,4 +144,19 @@ fn clicking_the_open_community_again_closes_it() {
 	run(vec![click(true)], &mut state);
 	run(vec![click(false)], &mut state);
 	assert_eq!(nav::selected_guild(&state).map(|g| g.id), Some(guild));
+}
+
+#[test]
+fn home_shows_the_dashboard_and_recent_conversations() {
+	let ctx = egui::Context::default();
+	install(&ctx).unwrap();
+	let mut solace = Solace::default();
+	let mut state = test_support::demo_state();
+	state.open_home();
+	assert!(!nav::recent(&state, 10).is_empty());
+	for size in [egui::vec2(1536.0, 1024.0), egui::vec2(900.0, 640.0)] {
+		frame(&ctx, size, |ui| {
+			let _ = solace.show(ui, &mut state);
+		});
+	}
 }

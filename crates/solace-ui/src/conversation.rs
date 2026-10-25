@@ -24,7 +24,7 @@ pub fn show(solace: &mut Solace, ui: &mut Ui, state: &mut State, commands: &mut 
 	let p = theme::palette(ui.ctx());
 	let rect = ui.max_rect();
 	let Some(channel) = nav::selected_channel(state).cloned() else {
-		welcome(solace, ui, state, rect, &p);
+		crate::dashboard::show(solace, ui, state, commands);
 		return;
 	};
 	let header = Rect::from_min_size(rect.min, vec2(rect.width(), theme::size::HEADER));
@@ -62,64 +62,6 @@ pub fn show(solace: &mut Solace, ui: &mut Ui, state: &mut State, commands: &mut 
 		&p,
 	);
 	composer::show(solace, ui, state, commands, &channel, composer_rect);
-}
-
-fn welcome(solace: &mut Solace, ui: &mut Ui, state: &State, rect: Rect, p: &Palette) {
-	let hero = Rect::from_min_size(
-		rect.min + vec2(24.0, 24.0),
-		vec2(rect.width() - 48.0, 300.0),
-	);
-	let texture = solace.scenery.texture(ui.ctx(), 7, Mood::Dawn).id();
-	paint::cover_image(
-		ui.painter(),
-		hero,
-		theme::size::RADIUS_CARD,
-		texture,
-		vec2(1280.0, 380.0),
-	);
-	paint::gradient(
-		ui.painter(),
-		hero,
-		theme::size::RADIUS_CARD as f32,
-		&[
-			(0.35, Color32::TRANSPARENT),
-			(1.0, Color32::from_black_alpha(130)),
-		],
-	);
-	let name = state.user.as_ref().map_or("there".to_owned(), |u| {
-		state.user_display_name(u).to_owned()
-	});
-	paint::label(
-		ui.painter(),
-		hero.left_bottom() + vec2(30.0, -78.0),
-		Align2::LEFT_CENTER,
-		&format!("Welcome back, {name}"),
-		theme::serif(34.0),
-		Color32::WHITE,
-	);
-	paint::label(
-		ui.painter(),
-		hero.left_bottom() + vec2(30.0, -40.0),
-		Align2::LEFT_CENTER,
-		"Pick a community or a conversation to begin.",
-		theme::sans(15.0),
-		Color32::from_white_alpha(230),
-	);
-	let status = if !state.gateway_connected && !state.demo {
-		state.status
-	} else {
-		""
-	};
-	if !status.is_empty() {
-		paint::label(
-			ui.painter(),
-			pos2(rect.center().x, hero.bottom() + 40.0),
-			Align2::CENTER_CENTER,
-			status,
-			theme::sans(13.0),
-			p.muted,
-		);
-	}
 }
 
 fn header_bar(

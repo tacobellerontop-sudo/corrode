@@ -14,7 +14,7 @@ egui's editor with Solace's own frames and colours).
 | Conversation | flexible | Header (icon, title, breadcrumb, People/Voice/More), pinned community banner, timeline, composer |
 | Context | 326, hidden below 1180 | Voice Room card, Members, Community info, profile card |
 
-The Thread panel floats over the right of the conversation. Below 760 px of height the
+Home opens a dashboard in place of a conversation: a greeting banner, stat tiles (unread, mentions, friends online, people in voice), Jump back in, Live in voice, Online now and Your communities. Its sidebar is a single Recent list. The Thread panel floats over the right of the conversation. Below 760 px of height the
 community banner scrolls with the timeline instead of staying pinned.
 
 ## Tokens

@@ -121,6 +121,10 @@ fn main() -> eframe::Result {
 					.unwrap();
 				let _ = state.select(dm);
 			}
+			if args.iter().any(|a| a == "--home") {
+				solace.open_thread(None);
+				state.open_home();
+			}
 			if args.iter().any(|a| a == "--settings") {
 				solace.open_settings(solace_ui::SettingsPage::Appearance);
 			}
