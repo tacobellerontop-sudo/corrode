@@ -10,11 +10,11 @@ egui's editor with Solace's own frames and colours).
 | Region | Width | Contents |
 |---|---|---|
 | Rail | 80 | Brand mark; Home, Direct messages, Communities, Activity; Settings; your account |
-| Sidebar | 272 (232 when narrow) | Title, search (Ctrl/⌘ K), Communities with the open community's channels, Direct Messages |
+| Sidebar | 272 (232 when narrow; hidden on Home) | Title, search (Ctrl/⌘ K), Communities with the open community's channels, Direct Messages |
 | Conversation | flexible | Header (icon, title, breadcrumb, People/Voice/More), pinned community banner, timeline, composer |
 | Context | 326, hidden below 1180 | Voice Room card, Members, Community info, profile card |
 
-Home opens a dashboard in place of a conversation: a greeting banner, stat tiles (unread, mentions, friends online, people in voice), Jump back in, Live in voice, Online now and Your communities. Its sidebar is a single Recent list. The Thread panel floats over the right of the conversation. Below 760 px of height the
+Home is a full-width dashboard with no sidebar, led by direct messages: a greeting banner, stat tiles (unread messages, DM mentions, friends online, recent conversations), Messages and Online now, then Live in voice and Your communities. Opening a conversation from it moves to the Direct or Communities pane. The Thread panel floats over the right of the conversation. Below 760 px of height the
 community banner scrolls with the timeline instead of staying pinned.
 
 ## Tokens

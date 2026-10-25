@@ -147,16 +147,23 @@ fn clicking_the_open_community_again_closes_it() {
 }
 
 #[test]
-fn home_shows_the_dashboard_and_recent_conversations() {
+fn home_shows_the_dashboard_without_a_sidebar() {
 	let ctx = egui::Context::default();
 	install(&ctx).unwrap();
 	let mut solace = Solace::default();
 	let mut state = test_support::demo_state();
 	state.open_home();
-	assert!(!nav::recent(&state, 10).is_empty());
+	assert!(!nav::direct(&state).is_empty());
 	for size in [egui::vec2(1536.0, 1024.0), egui::vec2(900.0, 640.0)] {
 		frame(&ctx, size, |ui| {
 			let _ = solace.show(ui, &mut state);
 		});
 	}
+	// Opening a direct message from the dashboard moves to the Direct pane and its sidebar.
+	let dm = nav::direct(&state)[0].id;
+	let _ = state.select(dm);
+	frame(&ctx, egui::vec2(1400.0, 900.0), |ui| {
+		let _ = solace.show(ui, &mut state);
+	});
+	assert_eq!(solace.pane, Pane::Direct);
 }

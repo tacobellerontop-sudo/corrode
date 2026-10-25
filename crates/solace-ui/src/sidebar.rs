@@ -53,7 +53,7 @@ pub fn show(solace: &mut Solace, ui: &mut Ui, state: &mut State, commands: &mut 
 			ui.spacing_mut().item_spacing = vec2(0.0, 2.0);
 			let query = solace.search.trim().to_lowercase();
 			match solace.pane {
-				Pane::Home => recent(solace, ui, state, commands, &query),
+				Pane::Home => {}
 				Pane::Direct => direct(solace, ui, state, commands, &query, usize::MAX),
 				Pane::Explore => communities(solace, ui, state, commands, &query, true),
 				Pane::Activity => activity(solace, ui, state, commands, &query),
@@ -634,129 +634,6 @@ fn direct(
 				theme::sans(10.5),
 				p.faint,
 			);
-		}
-		if response.clicked()
-			&& let Some(command) = state.select(channel.id)
-		{
-			commands.push(command);
-		}
-	}
-}
-
-/// Home's sidebar: one list of recent conversations, communities and DMs together.
-fn recent(
-	solace: &mut Solace,
-	ui: &mut Ui,
-	state: &mut State,
-	commands: &mut Vec<Command>,
-	query: &str,
-) {
-	let p = theme::palette(ui.ctx());
-	let home = state.selected.is_none();
-	let (rect, response) = row(ui, 44.0, home);
-	icons::paint_at(
-		ui.painter(),
-		Icon::Home,
-		rect.left_center() + vec2(26.0, 0.0),
-		16.0,
-		if home { p.text } else { p.muted },
-	);
-	paint::text_left(
-		ui.painter(),
-		rect.left_center() + vec2(46.0, 0.0),
-		"Dashboard",
-		theme::medium(14.0),
-		p.text,
-		rect.width() - 60.0,
-	);
-	if response.clicked() {
-		state.open_home();
-	}
-	ui.add_space(8.0);
-	section_header(ui, "Recent", None);
-	let channels: Vec<Channel> = nav::recent(state, 24)
-		.into_iter()
-		.filter(|c| matches(query, &conversation_title(state, c)))
-		.cloned()
-		.collect();
-	if channels.is_empty() {
-		empty(
-			ui,
-			if query.is_empty() {
-				"Nothing yet. Open a conversation to begin"
-			} else {
-				"No matching conversations"
-			},
-		);
-	}
-	for channel in channels {
-		let selected = state.selected == Some(channel.id);
-		let (rect, response) = row(ui, 52.0, selected);
-		let avatar = Rect::from_min_size(rect.left_center() + vec2(8.0, -17.0), vec2(34.0, 34.0));
-		let (title, place) = match channel.guild.and_then(|g| state.guild(g)).cloned() {
-			Some(guild) => {
-				let texture = solace.images.get_opt(guild.icon_key().as_deref());
-				paint::avatar(
-					ui.painter(),
-					avatar,
-					AvatarShape::Rounded(10.0),
-					texture,
-					&guild.name,
-					guild.id.0,
-					&p,
-				);
-				(format!("#{}", channel.name), guild.name.clone())
-			}
-			None => {
-				conversation_avatar(solace, ui.painter(), avatar, state, &channel, &p);
-				let peer = channel.recipients.first().filter(|_| channel.kind == 1);
-				if let Some(color) =
-					peer.and_then(|u| paint::status_color(nav::status_of(state, u.id), &p))
-				{
-					paint::presence(
-						ui.painter(),
-						avatar.right_bottom() - vec2(4.0, 4.0),
-						4.0,
-						color,
-						if selected { p.selected } else { p.sidebar },
-					);
-				}
-				(
-					conversation_title(state, &channel),
-					if channel.kind == 3 {
-						"Group".to_owned()
-					} else {
-						"Direct message".to_owned()
-					},
-				)
-			}
-		};
-		let unread = !selected && nav::channel_unread(state, &channel);
-		let left = avatar.right() + 12.0;
-		let max = rect.right() - left - 26.0;
-		paint::text_left(
-			ui.painter(),
-			pos2(left, rect.center().y - 8.0),
-			&title,
-			if unread {
-				theme::semibold(13.5)
-			} else {
-				theme::sans(13.5)
-			},
-			p.text,
-			max,
-		);
-		paint::text_left(
-			ui.painter(),
-			pos2(left, rect.center().y + 10.0),
-			&place,
-			theme::sans(11.5),
-			p.muted,
-			max,
-		);
-		if unread {
-			ui.painter()
-				.circle_filled(rect.right_center() - vec2(14.0, 0.0), 4.0, p.accent);
 		}
 		if response.clicked()
 			&& let Some(command) = state.select(channel.id)

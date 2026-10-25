@@ -1,5 +1,6 @@
-//! Home dashboard: a greeting, at-a-glance stats, recent conversations, live voice rooms,
-//! who's online and every community, shown when no conversation is open.
+//! Home dashboard, shown when no conversation is open. Direct messages lead: a greeting,
+//! message-first stats, your recent conversations and who's online, then live voice rooms and
+//! a compact row of communities.
 use crate::{
 	Pane, Solace, clock,
 	icons::{self, Icon},
@@ -20,6 +21,7 @@ const TILE: f32 = 98.0;
 const ROW: f32 = 58.0;
 const CARD_HEAD: f32 = 56.0;
 const COMMUNITY_TILE: f32 = 132.0;
+const MESSAGES: usize = 8;
 
 fn greeting() -> &'static str {
 	match clock::now().hour() {
@@ -41,21 +43,26 @@ fn snapshot(state: &State) -> Snapshot {
 	let unread = state
 		.channels
 		.iter()
-		.filter(|c| (nav::is_text(c.kind) || nav::is_dm(c)) && nav::channel_unread(state, c))
+		.filter(|c| nav::is_dm(c) && nav::channel_unread(state, c))
 		.count();
 	let mentions = state
 		.channels
 		.iter()
+		.filter(|c| nav::is_dm(c))
 		.map(|c| state.mention_count(c.id))
 		.fold(0u32, u32::saturating_add);
 	Snapshot {
-		recent: nav::recent(state, 6).into_iter().cloned().collect(),
+		recent: nav::direct(state)
+			.into_iter()
+			.take(MESSAGES)
+			.cloned()
+			.collect(),
 		rooms: nav::live_rooms(state)
 			.into_iter()
 			.take(4)
 			.map(|(c, people)| (c.clone(), people))
 			.collect(),
-		online: nav::online_people(state).into_iter().take(6).collect(),
+		online: nav::online_people(state).into_iter().take(8).collect(),
 		unread,
 		mentions,
 	}
@@ -112,20 +119,19 @@ pub fn show(solace: &mut Solace, ui: &mut Ui, state: &mut State, commands: &mut 
 	};
 
 	let guilds: Vec<model::Guild> = nav::communities(state).cloned().collect();
-	let per_row = ((left_w - 40.0 + 12.0) / (150.0 + 12.0)).floor().max(1.0) as usize;
+	let per_row = ((width - 40.0 + 12.0) / (150.0 + 12.0)).floor().max(1.0) as usize;
 	let community_rows = guilds.len().div_ceil(per_row).max(1);
-	let recent_h = CARD_HEAD + data.recent.len().max(1) as f32 * ROW + 14.0;
-	let communities_h = CARD_HEAD + community_rows as f32 * (COMMUNITY_TILE + 12.0) + 8.0;
-	let rooms_h = CARD_HEAD + data.rooms.len().max(1) as f32 * 76.0 + 10.0;
+	let messages_h = CARD_HEAD + data.recent.len().max(1) as f32 * ROW + 14.0;
 	let online_h = CARD_HEAD + data.online.len().max(1) as f32 * ROW + 14.0;
-	let left_total = recent_h + GAP + communities_h;
-	let right_total = rooms_h + GAP + online_h;
+	let rooms_h = CARD_HEAD + data.rooms.len().max(1) as f32 * 76.0 + 10.0;
+	let communities_h = CARD_HEAD + community_rows as f32 * (COMMUNITY_TILE + 12.0) + 8.0;
+	let right_total = online_h + GAP + rooms_h;
 	let columns_h = if two_columns {
-		left_total.max(right_total)
+		messages_h.max(right_total)
 	} else {
-		left_total + GAP + right_total
+		messages_h + GAP + right_total
 	};
-	let total = PAD + HERO + GAP + TILE + GAP + columns_h + PAD;
+	let total = PAD + HERO + GAP + TILE + GAP + columns_h + GAP + communities_h + PAD;
 
 	let mut child = ui.new_child(egui::UiBuilder::new().max_rect(area).id_salt("dashboard"));
 	child.set_clip_rect(area);
@@ -155,12 +161,23 @@ pub fn show(solace: &mut Solace, ui: &mut Ui, state: &mut State, commands: &mut 
 			);
 			y += TILE + GAP;
 
-			let recent = Rect::from_min_size(pos2(left, y), vec2(left_w, recent_h));
-			recent_card(solace, ui, state, commands, &data.recent, recent, &p);
-			let communities = Rect::from_min_size(
-				pos2(left, recent.bottom() + GAP),
-				vec2(left_w, communities_h),
-			);
+			// Messages first, people beside them, servers after.
+			let messages = Rect::from_min_size(pos2(left, y), vec2(left_w, messages_h));
+			messages_card(solace, ui, state, commands, &data.recent, messages, &p);
+
+			let (right_x, right_y) = if two_columns {
+				(left + left_w + GAP, y)
+			} else {
+				(left, messages.bottom() + GAP)
+			};
+			let online = Rect::from_min_size(pos2(right_x, right_y), vec2(right_w, online_h));
+			online_card(solace, ui, state, commands, &data.online, online, &p);
+			let rooms =
+				Rect::from_min_size(pos2(right_x, online.bottom() + GAP), vec2(right_w, rooms_h));
+			rooms_card(solace, ui, state, commands, &data.rooms, rooms, &p);
+
+			let communities =
+				Rect::from_min_size(pos2(left, y + columns_h + GAP), vec2(width, communities_h));
 			communities_card(
 				solace,
 				ui,
@@ -171,17 +188,6 @@ pub fn show(solace: &mut Solace, ui: &mut Ui, state: &mut State, commands: &mut 
 				communities,
 				&p,
 			);
-
-			let (right_x, right_y) = if two_columns {
-				(left + left_w + GAP, y)
-			} else {
-				(left, communities.bottom() + GAP)
-			};
-			let rooms = Rect::from_min_size(pos2(right_x, right_y), vec2(right_w, rooms_h));
-			rooms_card(solace, ui, state, commands, &data.rooms, rooms, &p);
-			let online =
-				Rect::from_min_size(pos2(right_x, rooms.bottom() + GAP), vec2(right_w, online_h));
-			online_card(solace, ui, state, commands, &data.online, online, &p);
 		});
 }
 
@@ -226,10 +232,13 @@ fn hero(solace: &mut Solace, ui: &Ui, state: &State, data: &Snapshot, rect: Rect
 	let in_voice: usize = data.rooms.iter().map(|(_, people)| people.len()).sum();
 	let mut parts = Vec::new();
 	parts.push(match data.unread {
-		0 => "You're all caught up".to_owned(),
-		1 => "1 conversation has something new".to_owned(),
-		n => format!("{n} conversations have something new"),
+		0 => "No unread messages".to_owned(),
+		1 => "1 conversation is waiting for you".to_owned(),
+		n => format!("{n} conversations are waiting for you"),
 	});
+	if !data.online.is_empty() {
+		parts.push(format!("{} friends online", data.online.len()));
+	}
 	if in_voice > 0 {
 		parts.push(format!(
 			"{in_voice} {} hanging out in voice",
@@ -251,13 +260,12 @@ fn hero(solace: &mut Solace, ui: &Ui, state: &State, data: &Snapshot, rect: Rect
 }
 
 fn stats(solace: &mut Solace, ui: &mut Ui, data: &Snapshot, rect: Rect, p: &Palette) {
-	let in_voice: usize = data.rooms.iter().map(|(_, people)| people.len()).sum();
 	let tiles = [
 		(
 			Icon::Bell,
 			data.unread.to_string(),
-			"Unread conversations",
-			Pane::Activity,
+			"Unread messages",
+			Pane::Direct,
 		),
 		(
 			Icon::At,
@@ -272,10 +280,10 @@ fn stats(solace: &mut Solace, ui: &mut Ui, data: &Snapshot, rect: Rect, p: &Pale
 			Pane::Direct,
 		),
 		(
-			Icon::Waveform,
-			in_voice.to_string(),
-			"In voice now",
-			Pane::Explore,
+			Icon::Thread,
+			data.recent.len().to_string(),
+			"Recent conversations",
+			Pane::Direct,
 		),
 	];
 	let w = (rect.width() - 3.0 * 14.0) / 4.0;
@@ -317,7 +325,7 @@ fn stats(solace: &mut Solace, ui: &mut Ui, data: &Snapshot, rect: Rect, p: &Pale
 	}
 }
 
-fn recent_card(
+fn messages_card(
 	solace: &mut Solace,
 	ui: &mut Ui,
 	state: &mut State,
@@ -326,9 +334,14 @@ fn recent_card(
 	rect: Rect,
 	p: &Palette,
 ) {
-	card(ui, rect, "Jump back in", None, p);
+	card(ui, rect, "Messages", Some("Direct and group"), p);
 	if recent.is_empty() {
-		empty_line(ui, rect, "Conversations you open will appear here", p);
+		empty_line(
+			ui,
+			rect,
+			"Message a friend and the conversation appears here",
+			p,
+		);
 		return;
 	}
 	for (i, channel) in recent.iter().enumerate() {
@@ -338,7 +351,7 @@ fn recent_card(
 		);
 		let response = ui.interact(
 			row,
-			ui.scope_id().with(("recent", channel.id)),
+			ui.scope_id().with(("message", channel.id)),
 			Sense::click(),
 		);
 		let t = paint::hover_t(ui, &response);
@@ -346,35 +359,23 @@ fn recent_card(
 			ui.painter().rect_filled(row, 12, p.hover.gamma_multiply(t));
 		}
 		let icon = Rect::from_min_size(row.left_center() + vec2(10.0, -19.0), vec2(38.0, 38.0));
-		let (title, place) = match channel.guild.and_then(|g| state.guild(g)).cloned() {
-			Some(guild) => {
-				let texture = solace.images.get_opt(guild.icon_key().as_deref());
-				paint::avatar(
-					ui.painter(),
-					icon,
-					AvatarShape::Rounded(11.0),
-					texture,
-					&guild.name,
-					guild.id.0,
-					p,
-				);
-				(format!("#{}", channel.name), guild.name.clone())
-			}
-			None => {
-				conversation_avatar(solace, ui.painter(), icon, state, channel, p);
-				let place = if channel.kind == 3 {
-					"Group".to_owned()
-				} else {
-					paint::status_label(
-						channel
-							.recipients
-							.first()
-							.and_then(|u| nav::status_of(state, u.id)),
-					)
-					.to_owned()
-				};
-				(conversation_title(state, channel), place)
-			}
+		conversation_avatar(solace, ui.painter(), icon, state, channel, p);
+		let peer = channel.recipients.first().filter(|_| channel.kind == 1);
+		let status = peer.and_then(|u| nav::status_of(state, u.id));
+		if let Some(color) = paint::status_color(status, p) {
+			paint::presence(
+				ui.painter(),
+				icon.right_bottom() - vec2(4.0, 4.0),
+				4.5,
+				color,
+				mix(p.surface, p.hover, t),
+			);
+		}
+		let place = match peer {
+			_ if channel.kind == 3 => format!("Group · {} people", channel.recipients.len() + 1),
+			Some(user) => nav::custom_status_of(state, user.id)
+				.map_or_else(|| paint::status_label(status).to_owned(), str::to_owned),
+			None => "Direct message".to_owned(),
 		};
 		let unread = nav::channel_unread(state, channel);
 		let text_left = icon.right() + 14.0;
@@ -382,7 +383,7 @@ fn recent_card(
 		paint::text_left(
 			ui.painter(),
 			pos2(text_left, row.center().y - 9.0),
-			&title,
+			&conversation_title(state, channel),
 			if unread {
 				theme::semibold(14.0)
 			} else {
@@ -409,17 +410,31 @@ fn recent_card(
 				p.faint,
 			);
 		}
-		if unread {
+		let mentions = state.mention_count(channel.id);
+		if mentions > 0 {
+			let badge = Rect::from_center_size(
+				pos2(row.right() - 22.0, row.center().y + 10.0),
+				vec2(if mentions > 9 { 26.0 } else { 18.0 }, 16.0),
+			);
+			ui.painter().rect_filled(badge, 8, p.dnd);
+			paint::label(
+				ui.painter(),
+				badge.center(),
+				Align2::CENTER_CENTER,
+				&mentions.min(99).to_string(),
+				theme::semibold(10.5),
+				Color32::WHITE,
+			);
+		} else if unread {
 			ui.painter().circle_filled(
 				pos2(row.right() - 18.0, row.center().y + 10.0),
 				4.0,
 				p.accent,
 			);
 		}
-		if response.clicked()
-			&& let Some(command) = state.select(channel.id)
-		{
-			commands.push(command);
+		if response.clicked() {
+			solace.pane = Pane::Direct;
+			commands.extend(state.select(channel.id));
 		}
 	}
 }
@@ -742,6 +757,7 @@ fn online_card(
 			mix(p.faint, p.accent, t),
 		);
 		if response.clicked() {
+			solace.pane = Pane::Direct;
 			let command = match nav::dm_with(state, user.id) {
 				Some(channel) => state.select(channel),
 				None => state.open_friend_dm(user.id),

@@ -244,7 +244,10 @@ impl Solace {
 		let width = full.width();
 		// The dashboard uses the full width; the context column belongs to a conversation.
 		let aside = self.aside_open && width >= 1180.0 && state.selected.is_some();
-		let sidebar_w = if width < 900.0 {
+		// Home is the dashboard alone; the sidebar belongs to the other panes.
+		let sidebar_w = if self.pane == Pane::Home {
+			0.0
+		} else if width < 900.0 {
 			232.0
 		} else {
 			theme::size::SIDEBAR
@@ -271,9 +274,11 @@ impl Solace {
 		self.region(ui, rail, "rail", |this, ui| {
 			rail::show(this, ui, state, &mut commands)
 		});
-		self.region(ui, sidebar, "sidebar", |this, ui| {
-			sidebar::show(this, ui, state, &mut commands)
-		});
+		if sidebar_w > 0.0 {
+			self.region(ui, sidebar, "sidebar", |this, ui| {
+				sidebar::show(this, ui, state, &mut commands)
+			});
+		}
 		self.region(ui, main, "main", |this, ui| {
 			conversation::show(this, ui, state, &mut commands)
 		});
@@ -328,11 +333,13 @@ impl Solace {
 		self.more_menu = false;
 		self.heights.clear();
 		self.revealed.clear();
-		if let Some(channel) = state.selected.and_then(|id| state.channel(id))
-			&& channel.guild.is_none()
-			&& self.pane == Pane::Explore
-		{
-			self.pane = Pane::Home;
+		// Home has no sidebar, so opening a conversation moves to the pane that lists it.
+		if let Some(channel) = state.selected.and_then(|id| state.channel(id)) {
+			match (channel.guild.is_some(), self.pane) {
+				(false, Pane::Home | Pane::Explore) => self.pane = Pane::Direct,
+				(true, Pane::Home) => self.pane = Pane::Explore,
+				_ => {}
+			}
 		}
 	}
 
