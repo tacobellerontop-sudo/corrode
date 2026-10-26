@@ -344,7 +344,7 @@ pub fn restoring(solace: &mut Solace, ui: &mut Ui, stage: &str) -> bool {
 	if seg.width() > 0.0 {
 		ui.painter().rect_filled(seg, 2, p.accent);
 	}
-	ui.ctx().request_repaint();
+	ui.ctx().request_repaint_after(crate::motion::FRAME);
 	paint::label(
 		ui.painter(),
 		pos2(card.center().x, card.top() + 200.0),

@@ -124,8 +124,7 @@ pub fn show(
 			theme::sans(12.0),
 			p.muted,
 		);
-		ui.ctx()
-			.request_repaint_after(std::time::Duration::from_millis(60));
+		crate::motion::ticker(ui.ctx());
 		top += TYPING_STRIP;
 	}
 

@@ -77,3 +77,17 @@ what they show changes; the rail's selection pill glides between panes; dashboar
 in one after another and their numbers count up; dialogs, menus and the thread panel fade
 and settle into place; new messages and call tiles rise in. `motion.rs` times entrances
 from when something first appears, and repaints are requested only while one is running.
+
+## CPU budget
+
+Everything is rasterized on the GPU; the CPU builds and tessellates about 15k vertices a
+frame (under 1 ms; `cargo run --release -p solace-ui --example profile` measures each
+scene). The real cost is how many frames are drawn, so an idle window draws none:
+
+- Animations run at about 60 fps on any display; looping indicators (typing, loading,
+  ringing) tick at 12 fps and only while something is actually happening.
+- Minimized or unfocused, motion is skipped and only real changes redraw.
+- In the background with no call, ring, mic test or playback, the desktop app lowers its
+  priority and asks for Windows Efficiency mode (`platform::priority`), so a game in front
+  gets the CPU first. Focus or a call restores normal scheduling at once.
+- `tests::idle_interface_stops_requesting_frames` fails if an idle view keeps redrawing.

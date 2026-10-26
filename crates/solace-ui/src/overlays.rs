@@ -1098,7 +1098,9 @@ fn voice_page(solace: &mut Solace, ui: &mut Ui, body: Rect, p: &Palette) {
 		);
 		ui.painter()
 			.rect_filled(fill, 5, mix(p.online, p.accent, 0.3));
-		ui.ctx().request_repaint();
+		// The engine refreshes the level about 20 times a second; drawing faster is waste.
+		ui.ctx()
+			.request_repaint_after(std::time::Duration::from_millis(50));
 	}
 	let test = Rect::from_min_size(pos2(meter.right() + 16.0, y - 14.0), vec2(134.0, 36.0));
 	let label = if media.voice_preview_requested {

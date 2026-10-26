@@ -107,7 +107,7 @@ impl Toasts {
 			age < 0.3 || age > LIFETIME.as_secs_f32() - 0.5
 		});
 		if moving {
-			ctx.request_repaint();
+			ctx.request_repaint_after(crate::motion::FRAME);
 		} else {
 			ctx.request_repaint_after(Duration::from_millis(100));
 		}

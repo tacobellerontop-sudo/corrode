@@ -7,6 +7,7 @@
 mod audio;
 #[allow(dead_code)]
 mod avatars;
+mod background;
 #[allow(dead_code)]
 mod cache;
 #[allow(dead_code)]
@@ -206,6 +207,7 @@ struct Desktop {
 	roster_generation: Option<u64>,
 	draft_restore_pending: bool,
 	preferences: preferences::Preferences,
+	background: background::Background,
 	/// A close was refused once because of unsent work; the next close within this window wins.
 	close_warned: Option<std::time::Instant>,
 	token_input: Zeroizing<String>,
@@ -308,6 +310,7 @@ impl Desktop {
 			roster_generation: None,
 			draft_restore_pending: false,
 			preferences: Default::default(),
+			background: Default::default(),
 			close_warned: None,
 			token_input: Zeroizing::new(String::new()),
 			authorized: false,
@@ -1702,6 +1705,21 @@ impl eframe::App for Desktop {
 				cache::Operation::SaveAppPreferences(Box::new(value)),
 			);
 		}
+		// Leave the CPU to the app in front (usually a game) unless something live is running.
+		let (focused, minimized) = ctx.input(|i| {
+			(
+				i.viewport().focused.unwrap_or(true),
+				i.viewport().minimized == Some(true),
+			)
+		});
+		self.background.update(background::Activity {
+			focused,
+			minimized,
+			realtime: self.state.voice.active.is_some()
+				|| self.state.voice.incoming.is_some()
+				|| self.solace.audio.playing
+				|| self.solace.media.voice_preview_requested,
+		});
 		// Push to talk: hold V while Solace has focus and no text field is active.
 		self.solace.media.voice_ptt_active = self.solace.media.voice_push_to_talk
 			&& self.state.voice.active.is_some()

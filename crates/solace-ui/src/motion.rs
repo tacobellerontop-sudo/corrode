@@ -1,7 +1,36 @@
 //! Small motion helpers. Entrances are measured from when something first appears on screen,
 //! so they replay whenever it comes back after being hidden, and they only request repaints
 //! while they are running.
+//!
+//! Every frame costs CPU (building and tessellating the interface, then the driver's submit),
+//! so motion is frugal: animations run at about 60 fps whatever the display's refresh rate,
+//! looping indicators tick at a dozen frames a second, and nothing animates while the window
+//! is minimized or another app (say, a game) has focus — the interface simply shows its end
+//! state and waits for real changes.
 use egui::{Context, Id};
+use std::time::Duration;
+
+/// Frame interval for animations: about 60 fps, even on 144 or 240 Hz displays.
+pub const FRAME: Duration = Duration::from_millis(16);
+/// Frame interval for looping indicators (typing and loading dots, pulses).
+pub const TICK: Duration = Duration::from_millis(83);
+
+/// The window is minimized or not focused: skip motion and leave the CPU alone.
+pub fn calm(ctx: &Context) -> bool {
+	ctx.input(|i| {
+		let viewport = i.viewport();
+		viewport.minimized == Some(true) || viewport.focused == Some(false)
+	})
+}
+
+/// Time for a looping indicator, asking for its next tick unless the window is calm (then the
+/// indicator holds still and costs nothing).
+pub fn ticker(ctx: &Context) -> f64 {
+	if !calm(ctx) {
+		ctx.request_repaint_after(TICK);
+	}
+	ctx.input(|i| i.time)
+}
 
 /// Cubic ease-out: quick start, soft landing.
 pub fn ease_out(t: f32) -> f32 {
@@ -10,10 +39,13 @@ pub fn ease_out(t: f32) -> f32 {
 
 /// Eased progress of an animation that began at egui time `since`.
 pub fn progress(ctx: &Context, since: f64, duration: f32) -> f32 {
+	if calm(ctx) {
+		return 1.0;
+	}
 	let elapsed = (ctx.input(|i| i.time) - since) as f32;
 	let t = (elapsed / duration.max(0.001)).clamp(0.0, 1.0);
 	if t < 1.0 {
-		ctx.request_repaint();
+		ctx.request_repaint_after(FRAME);
 	}
 	ease_out(t)
 }

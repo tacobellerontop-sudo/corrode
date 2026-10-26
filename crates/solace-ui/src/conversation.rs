@@ -1631,17 +1631,25 @@ fn paint_row(
 			None
 		}
 		Row::Loading => {
-			let t = ui.input(|i| i.time) as f32;
+			// The dots move only while a page is actually on its way; "more history exists"
+			// alone is a still row, so an open conversation costs nothing while idle.
+			let t = if state.history_pending {
+				crate::motion::ticker(ui.ctx()) as f32
+			} else {
+				0.0
+			};
 			for i in 0..3 {
-				let phase = ((t * 3.0 - i as f32 * 0.5).sin() * 0.5 + 0.5).powf(1.5);
+				let phase = if state.history_pending {
+					((t * 3.0 - i as f32 * 0.5).sin() * 0.5 + 0.5).powf(1.5)
+				} else {
+					0.35
+				};
 				ui.painter().circle_filled(
 					pos2(rect.center().x - 14.0 + i as f32 * 14.0, rect.center().y),
 					3.5,
 					mix(p.border, p.muted, phase),
 				);
 			}
-			ui.ctx()
-				.request_repaint_after(std::time::Duration::from_millis(50));
 			None
 		}
 		Row::Day(label) => {

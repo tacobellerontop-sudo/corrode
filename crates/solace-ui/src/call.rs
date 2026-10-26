@@ -158,12 +158,15 @@ pub(crate) fn banner(
 	painter.multiply_opacity(a);
 	painter.rect_filled(rect, 16, s.back);
 	let ringing = state.voice.incoming == Some(channel.id);
-	let pulse = (ui.input(|i| i.time) * 3.0).sin() as f32 * 0.5 + 0.5;
+	// A slow pulse while it rings; a steady dot for a call that is just running.
 	let dot = rect.left_center() + vec2(26.0, 0.0);
-	painter.circle_filled(dot, 7.0 + pulse * 5.0, s.speaking.gamma_multiply(0.25));
+	if ringing {
+		let pulse = (motion::ticker(ui.ctx()) * 3.0).sin() as f32 * 0.5 + 0.5;
+		painter.circle_filled(dot, 7.0 + pulse * 5.0, s.speaking.gamma_multiply(0.25));
+	} else {
+		painter.circle_filled(dot, 10.0, s.speaking.gamma_multiply(0.2));
+	}
 	painter.circle_filled(dot, 6.0, s.speaking);
-	ui.ctx()
-		.request_repaint_after(std::time::Duration::from_millis(33));
 	painter.text(
 		rect.left_center() + vec2(48.0, -9.0),
 		Align2::LEFT_CENTER,
@@ -500,9 +503,17 @@ pub(crate) fn show(
 		theme::sans(12.5),
 		s.soft,
 	);
-	if timer.is_some() {
+	let timer_seconds = state
+		.voice
+		.active
+		.as_ref()
+		.and_then(|call| call.connected_at)
+		.map(|at| at.elapsed().as_secs_f64());
+	if let Some(seconds) = timer_seconds {
+		// One frame per second for the clock, landing just after it turns over.
+		let into = seconds.fract();
 		ui.ctx()
-			.request_repaint_after(std::time::Duration::from_millis(500));
+			.request_repaint_after(std::time::Duration::from_secs_f64(1.0 - into + 0.01));
 	}
 	let full = Rect::from_center_size(
 		rect.right_top() + vec2(-30.0, TOP / 2.0 + 2.0),
@@ -782,13 +793,13 @@ fn person_tile(
 		let side = (rect.height() * 0.42).clamp(36.0, 112.0);
 		let avatar = Rect::from_center_size(rect.center() - vec2(0.0, 6.0), vec2(side, side));
 		if talk > 0.0 {
-			let breathe = (ui.input(|i| i.time) * 5.0).sin() as f32 * 0.5 + 0.5;
+			// The halo grows in and out with speech; it does not loop, so a busy call does
+			// not redraw every frame.
 			ui.painter().circle_filled(
 				avatar.center(),
-				side / 2.0 + 6.0 + breathe * 4.0 * talk,
+				side / 2.0 + 4.0 + 6.0 * talk,
 				s.speaking.gamma_multiply(0.18 * talk),
 			);
-			ui.ctx().request_repaint();
 		}
 		let texture = known
 			.as_ref()
@@ -989,7 +1000,7 @@ fn stream_tile(
 			);
 		} else {
 			// Three soft dots while the stream connects.
-			let time = ui.input(|i| i.time);
+			let time = motion::ticker(ui.ctx());
 			for i in 0..3 {
 				let phase = ((time * 4.0 - i as f64 * 0.6).sin() * 0.5 + 0.5) as f32;
 				ui.painter().circle_filled(
@@ -998,7 +1009,6 @@ fn stream_tile(
 					s.text.gamma_multiply(0.3 + 0.7 * phase),
 				);
 			}
-			ui.ctx().request_repaint();
 			let status = match solace.media.voice_stream_status {
 				"" => "Connecting to the stream…",
 				status => status,
