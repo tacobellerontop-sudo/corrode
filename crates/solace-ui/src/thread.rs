@@ -37,15 +37,23 @@ pub fn show(
 	let top = (main.top() + theme::size::HEADER + 210.0)
 		.min(main.bottom() - 420.0)
 		.max(main.top() + theme::size::HEADER + 8.0);
+	// The panel slides in from the right edge whenever a different thread opens.
+	let a = crate::motion::appear(
+		ui.ctx(),
+		egui::Id::unique(("solace-thread-enter", root_id)),
+		0.28,
+	);
 	let rect = Rect::from_min_max(
 		pos2(main.right() - 24.0 - WIDTH, top),
 		pos2(main.right() - 24.0, main.bottom() - 130.0),
-	);
+	)
+	.translate(vec2((1.0 - a) * 36.0, 0.0));
 	let mut close = false;
 	egui::Area::new(egui::Id::unique("solace-thread"))
 		.order(egui::Order::Middle)
 		.fixed_pos(rect.min)
 		.show(ui.ctx(), |ui| {
+			ui.multiply_opacity(a);
 			ui.set_clip_rect(rect.expand(60.0));
 			let (_, _) = ui.allocate_exact_size(rect.size(), Sense::click_and_drag());
 			paint::floating(ui.painter(), rect, 16, &p);

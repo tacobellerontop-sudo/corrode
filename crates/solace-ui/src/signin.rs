@@ -374,6 +374,9 @@ pub fn login_header(ui: &mut Ui, rect: Rect) -> bool {
 	let p = theme::palette(ui.ctx());
 	ui.painter().rect_filled(rect, 0, p.sidebar);
 	paint::hairline(ui.painter(), rect.left_bottom(), rect.right_bottom(), &p);
+	// This strip is also the window's title bar while Discord's page is open.
+	crate::chrome::drag_area(ui, rect);
+	let controls = crate::chrome::window_buttons(ui, rect);
 	icons::paint_weighted(
 		ui.painter(),
 		Icon::Logo,
@@ -397,7 +400,10 @@ pub fn login_header(ui: &mut Ui, rect: Rect) -> bool {
 		theme::sans(11.5),
 		p.muted,
 	);
-	let cancel = Rect::from_min_size(rect.right_center() - vec2(110.0, 16.0), vec2(94.0, 32.0));
+	let cancel = Rect::from_min_size(
+		rect.right_center() - vec2(controls + 110.0, 16.0),
+		vec2(94.0, 32.0),
+	);
 	paint::pill_button(
 		ui,
 		ui.scope_id().with("login-cancel"),

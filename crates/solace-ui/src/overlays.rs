@@ -3,6 +3,7 @@
 use crate::{
 	PickerTarget, Request, SettingsPage, Solace, emoji,
 	icons::{self, Icon},
+	motion,
 	paint::{self, AvatarShape, ButtonKind},
 	theme::{self, Palette, mix},
 };
@@ -52,12 +53,14 @@ fn picker(solace: &mut Solace, ctx: &Context, state: &mut State, commands: &mut 
 	min.y = min
 		.y
 		.clamp(screen.top() + 8.0, screen.bottom() - size.y - 8.0);
-	let rect = Rect::from_min_size(min, size);
+	let a = motion::appear(ctx, Id::unique("solace-picker-enter"), 0.18);
+	let rect = Rect::from_min_size(min + vec2(0.0, (1.0 - a) * 10.0), size);
 	let mut chosen: Option<&str> = None;
 	Area::new(Id::unique("solace-picker"))
 		.order(Order::Foreground)
 		.fixed_pos(rect.min)
 		.show(ctx, |ui| {
+			ui.multiply_opacity(a);
 			ui.set_clip_rect(rect.expand(60.0));
 			let _ = ui.allocate_exact_size(size, Sense::click());
 			paint::floating(ui.painter(), rect, 16, &p);
@@ -150,8 +153,12 @@ fn account_menu(solace: &mut Solace, ctx: &Context, state: &State) {
 		.collect();
 	let items = 4 + others.len();
 	let size = vec2(260.0, 78.0 + items as f32 * 38.0 + 10.0);
+	let a = motion::appear(ctx, Id::unique("solace-account-enter"), 0.18);
 	let rect = Rect::from_min_size(
-		pos2(screen.left() + 72.0, screen.bottom() - size.y - 14.0),
+		pos2(
+			screen.left() + 72.0 - (1.0 - a) * 8.0,
+			screen.bottom() - size.y - 14.0,
+		),
 		size,
 	);
 	let mut action = None;
@@ -159,6 +166,7 @@ fn account_menu(solace: &mut Solace, ctx: &Context, state: &State) {
 		.order(Order::Foreground)
 		.fixed_pos(rect.min)
 		.show(ctx, |ui| {
+			ui.multiply_opacity(a);
 			ui.set_clip_rect(rect.expand(60.0));
 			let _ = ui.allocate_exact_size(size, Sense::click());
 			paint::floating(ui.painter(), rect, 16, &p);
@@ -301,14 +309,17 @@ fn modal(
 ) -> bool {
 	let p = theme::palette(ctx);
 	let screen = ctx.content_rect();
-	let rect = Rect::from_center_size(screen.center(), size);
+	// Dialogs fade in over a darkening scrim and settle from slightly below.
+	let a = motion::appear(ctx, Id::unique((id, "enter")), 0.22);
+	let rect = Rect::from_center_size(screen.center() + vec2(0.0, (1.0 - a) * 16.0), size);
 	let mut dismissed = false;
 	Area::new(Id::unique((id, "scrim")))
 		.order(Order::Foreground)
 		.fixed_pos(screen.min)
 		.show(ctx, |ui| {
 			let (_, response) = ui.allocate_exact_size(screen.size(), Sense::click());
-			ui.painter().rect_filled(screen, 0, p.scrim);
+			ui.painter()
+				.rect_filled(screen, 0, p.scrim.gamma_multiply(a));
 			if response.clicked()
 				&& !rect.contains(response.interact_pointer_pos().unwrap_or(Pos2::ZERO))
 			{
@@ -319,6 +330,7 @@ fn modal(
 		.order(Order::Tooltip)
 		.fixed_pos(rect.min)
 		.show(ctx, |ui| {
+			ui.multiply_opacity(a);
 			ui.set_clip_rect(rect.expand(60.0));
 			let _ = ui.allocate_exact_size(size, Sense::click());
 			paint::floating(ui.painter(), rect, 20, &p);
@@ -1002,6 +1014,51 @@ fn device_list(
 }
 
 fn voice(solace: &mut Solace, ui: &mut Ui, body: Rect, p: &Palette) {
+	// The page is taller than the dialog; it scrolls inside the settings body.
+	egui::ScrollArea::vertical()
+		.id_salt("voice-settings")
+		.auto_shrink([false, false])
+		.show(ui, |ui| {
+			let (content, _) =
+				ui.allocate_exact_size(vec2(body.width() - 10.0, VOICE_PAGE), Sense::hover());
+			voice_page(solace, ui, content, p);
+		});
+}
+
+const VOICE_PAGE: f32 = 640.0;
+
+/// One labelled volume slider row.
+fn volume_row(ui: &mut Ui, at: Pos2, width: f32, label: &str, value: &mut u16, p: &Palette) {
+	paint::label(
+		ui.painter(),
+		at + vec2(0.0, 10.0),
+		Align2::LEFT_CENTER,
+		label,
+		theme::medium(13.5),
+		p.text,
+	);
+	paint::label(
+		ui.painter(),
+		at + vec2(width, 10.0),
+		Align2::RIGHT_CENTER,
+		&format!("{value}%"),
+		theme::sans(12.5),
+		p.muted,
+	);
+	let track = Rect::from_min_size(at + vec2(-8.0, 22.0), vec2(width + 16.0, 24.0));
+	paint::slider(
+		ui,
+		ui.scope_id().with(("volume", label)),
+		track,
+		value,
+		crate::media::MAX_VOLUME,
+		p.surface_alt,
+		p.accent,
+		p.surface,
+	);
+}
+
+fn voice_page(solace: &mut Solace, ui: &mut Ui, body: Rect, p: &Palette) {
 	heading(
 		ui,
 		body.min,
@@ -1076,10 +1133,73 @@ fn voice(solace: &mut Solace, ui: &mut Ui, body: Rect, p: &Palette) {
 			body.width(),
 		);
 	}
-	let toggle = Rect::from_min_size(
-		pos2(body.left(), body.bottom() - 40.0),
-		vec2(body.width(), 36.0),
+	let y = y + 66.0;
+	paint::label(
+		ui.painter(),
+		pos2(body.left(), y),
+		Align2::LEFT_CENTER,
+		"Volume",
+		theme::serif(17.0),
+		p.text,
 	);
+	let half = (body.width() - 32.0) / 2.0;
+	volume_row(
+		ui,
+		pos2(body.left(), y + 20.0),
+		half,
+		"Input volume",
+		&mut media.voice_gain.input_percent,
+		p,
+	);
+	volume_row(
+		ui,
+		pos2(body.left() + half + 32.0, y + 20.0),
+		half,
+		"Output volume",
+		&mut media.voice_gain.output_percent,
+		p,
+	);
+	volume_row(
+		ui,
+		pos2(body.left(), y + 84.0),
+		half,
+		"Stream volume",
+		&mut media.stream_volume,
+		p,
+	);
+	let adjusted = media.user_volumes.len() + media.muted_users.len();
+	let reset = Rect::from_min_size(
+		pos2(body.left() + half + 32.0, y + 100.0),
+		vec2(half.min(240.0), 34.0),
+	);
+	let note = match adjusted {
+		0 => "Everyone plays at 100%".to_owned(),
+		1 => "Reset 1 person's volume".to_owned(),
+		n => format!("Reset {n} people's volumes"),
+	};
+	if paint::pill_button(
+		ui,
+		ui.scope_id().with("reset-volumes"),
+		reset,
+		Some(Icon::Speaker),
+		&note,
+		ButtonKind::Ghost,
+		adjusted > 0,
+	)
+	.clicked()
+	{
+		media.user_volumes.clear();
+		media.muted_users.clear();
+	}
+	paint::text_left(
+		ui.painter(),
+		pos2(body.left(), y + 152.0),
+		"Set one person's volume from their tile in a call.",
+		theme::sans(12.0),
+		p.muted,
+		body.width(),
+	);
+	let toggle = Rect::from_min_size(pos2(body.left(), y + 180.0), vec2(body.width(), 36.0));
 	let response = ui.interact(toggle, ui.scope_id().with("ptt"), Sense::click());
 	paint::label(
 		ui.painter(),

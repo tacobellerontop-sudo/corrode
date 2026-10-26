@@ -45,10 +45,13 @@ WebView2 Runtime. See [platform support](docs/platform-support.md) and
 ```sh
 # Windows: the full app with a synthetic showcase
 cargo run -p solace --features demo -- --demo
+# ...or straight into a staged group call
+cargo run -p solace --features demo -- --demo --demo-call
 
 # Any OS with a GPU (or software Vulkan/GL): the interface preview
 cargo run -p solace-ui --example preview
 cargo run -p solace-ui --example preview -- --dark
+cargo run -p solace-ui --example preview -- --call
 ```
 
 ## Repository layout

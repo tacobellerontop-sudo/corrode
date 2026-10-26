@@ -334,7 +334,7 @@ fn voice_card(
 	}
 }
 
-fn find_user(state: &State, id: Id) -> Option<User> {
+pub(crate) fn find_user(state: &State, id: Id) -> Option<User> {
 	if let Some(user) = state.user.as_ref().filter(|u| u.id == id) {
 		return Some(user.clone());
 	}

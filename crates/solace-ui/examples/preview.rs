@@ -14,6 +14,8 @@ struct Preview {
 	frames: u32,
 	token: String,
 	authorized: bool,
+	call: bool,
+	captured: bool,
 }
 
 impl eframe::App for Preview {
@@ -23,6 +25,13 @@ impl eframe::App for Preview {
 
 	fn ui(&mut self, ui: &mut egui::Ui, _: &mut eframe::Frame) {
 		let ctx = ui.ctx().clone();
+		// Same window chrome as the desktop app.
+		let window = ui.max_rect();
+		let body = solace_ui::chrome::title_bar(ui, window, "Solace");
+		let mut body_ui =
+			ui.new_child(egui::UiBuilder::new().max_rect(body).id_salt("window-body"));
+		body_ui.set_clip_rect(body);
+		let ui = &mut body_ui;
 		if self.signin {
 			let accounts = [model::SavedAccount {
 				id: model::Id(101),
@@ -44,13 +53,22 @@ impl eframe::App for Preview {
 				},
 			);
 		} else {
+			// The call scene watches a stream for a few frames, then the stream ends.
+			if self.call && (self.frames == 1 || self.frames == 4) {
+				showcase::end_stream(&mut self.state);
+			}
 			let _ = self.solace.show(ui, &mut self.state);
 			let _ = self.solace.take_requests();
 		}
 		self.frames += 1;
+		// Capture once entrance animations have settled.
+		let settled = ctx.input(|i| i.time) > 1.6;
 		if let Some(out) = &self.out
-			&& self.frames == 12
+			&& self.frames >= 12
+			&& settled
+			&& !self.captured
 		{
+			self.captured = true;
 			let out = out.clone();
 			let close = ctx.clone();
 			ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(
@@ -125,6 +143,14 @@ fn main() -> eframe::Result {
 				solace.open_thread(None);
 				state.open_home();
 			}
+			let call = args.iter().any(|a| a == "--call");
+			if call {
+				solace.open_thread(None);
+				showcase::call_scene(&mut state, &mut solace);
+			}
+			if args.iter().any(|a| a == "--settings-voice") {
+				solace.open_settings(solace_ui::SettingsPage::Voice);
+			}
 			if args.iter().any(|a| a == "--settings") {
 				solace.open_settings(solace_ui::SettingsPage::Appearance);
 			}
@@ -136,6 +162,8 @@ fn main() -> eframe::Result {
 				frames: 0,
 				token: String::new(),
 				authorized: false,
+				call,
+				captured: false,
 			}))
 		}),
 	)

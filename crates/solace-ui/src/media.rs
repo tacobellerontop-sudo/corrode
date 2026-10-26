@@ -3,6 +3,11 @@
 use client_core::screen::{Settings, Source, SourceId};
 use model::Id;
 
+/// Highest playback or capture volume, in percent.
+pub const MAX_VOLUME: u16 = 200;
+/// Per-person overrides (volumes plus local mutes) the mixer and preferences hold.
+const MAX_OVERRIDES: usize = 64;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct VoiceGain {
 	pub input_percent: u16,
@@ -85,6 +90,12 @@ pub struct Media {
 	pub notification_preview: Option<model::notification_preferences::Sound>,
 	/// Settings dialog is showing the voice page (the engine previews the mic only then).
 	pub settings_voice_open: bool,
+	/// Per-person playback volume overrides (percent, 0–200); people at 100% are absent.
+	pub user_volumes: Vec<(Id, u16)>,
+	/// People silenced on this device only.
+	pub muted_users: Vec<Id>,
+	/// Playback volume of a watched stream's audio (percent, 0–200).
+	pub stream_volume: u16,
 }
 
 impl Default for Media {
@@ -129,6 +140,9 @@ impl Default for Media {
 			notification_options: Default::default(),
 			notification_preview: None,
 			settings_voice_open: false,
+			user_volumes: Vec::new(),
+			muted_users: Vec::new(),
+			stream_volume: 100,
 		}
 	}
 }
@@ -137,27 +151,97 @@ impl Media {
 	pub fn voice_settings_open(&self) -> bool {
 		self.settings_voice_open
 	}
-	/// Per-user playback volume (percent). Solace keeps everyone at 100% for now.
+	/// Per-user playback volumes (percent) for the call mixer; locally muted people play at 0.
 	pub fn voice_user_volumes(&self) -> [(u64, u16); 64] {
-		[(0, 100); 64]
+		let mut volumes = [(0, 100); 64];
+		let entries = self.muted_users.iter().map(|user| (user.0, 0)).chain(
+			self.user_volumes
+				.iter()
+				.filter(|(user, _)| !self.muted_users.contains(user))
+				.map(|(user, volume)| (user.0, (*volume).min(MAX_VOLUME))),
+		);
+		for (slot, entry) in volumes.iter_mut().zip(entries) {
+			*slot = entry;
+		}
+		volumes
 	}
 	pub fn voice_stream_volume(&self) -> u16 {
-		100
+		self.stream_volume.min(MAX_VOLUME)
 	}
-	/// Reset session-local call state (account change).
+	pub fn user_volume(&self, user: Id) -> u16 {
+		self.user_volumes
+			.iter()
+			.find(|(id, _)| *id == user)
+			.map_or(100, |(_, volume)| *volume)
+	}
+	pub fn set_user_volume(&mut self, user: Id, volume: u16) {
+		let volume = volume.min(MAX_VOLUME);
+		self.user_volumes.retain(|(id, _)| *id != user);
+		if volume != 100 {
+			// The mixer and preferences hold at most 64 overrides; the oldest one gives way.
+			if self.user_volumes.len() + self.muted_users.len() >= MAX_OVERRIDES {
+				self.user_volumes.remove(0);
+			}
+			self.user_volumes.push((user, volume));
+		}
+	}
+	pub fn is_user_muted(&self, user: Id) -> bool {
+		self.muted_users.contains(&user)
+	}
+	pub fn set_user_muted(&mut self, user: Id, muted: bool) {
+		self.muted_users.retain(|id| *id != user);
+		if muted {
+			if self.user_volumes.len() + self.muted_users.len() >= MAX_OVERRIDES
+				&& !self.user_volumes.is_empty()
+			{
+				self.user_volumes.remove(0);
+			}
+			if self.muted_users.len() < MAX_OVERRIDES {
+				self.muted_users.push(user);
+			}
+		}
+	}
+	/// Reset session-local call state (account change). Devices, volumes and other
+	/// device-level preferences stay.
 	pub fn reset(&mut self) {
-		let devices = (
-			std::mem::take(&mut self.voice_inputs),
-			std::mem::take(&mut self.voice_outputs),
-			self.voice_input.take(),
-			self.voice_output.take(),
+		let kept = Self {
+			voice_inputs: std::mem::take(&mut self.voice_inputs),
+			voice_outputs: std::mem::take(&mut self.voice_outputs),
+			voice_input: self.voice_input.take(),
+			voice_output: self.voice_output.take(),
+			voice_gain: self.voice_gain,
+			voice_push_to_talk: self.voice_push_to_talk,
+			voice_processing: self.voice_processing,
+			user_volumes: std::mem::take(&mut self.user_volumes),
+			muted_users: std::mem::take(&mut self.muted_users),
+			stream_volume: self.stream_volume,
+			..Self::default()
+		};
+		*self = kept;
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn mixer_volumes_include_overrides_and_local_mutes() {
+		let mut media = Media::default();
+		media.set_user_volume(Id(7), 150);
+		media.set_user_volume(Id(8), 100);
+		media.set_user_muted(Id(9), true);
+		let volumes = media.voice_user_volumes();
+		assert!(volumes.contains(&(9, 0)));
+		assert!(volumes.contains(&(7, 150)));
+		assert!(!volumes.iter().any(|(user, _)| *user == 8));
+		assert_eq!(media.user_volume(Id(7)), 150);
+		media.set_user_volume(Id(7), 999);
+		assert_eq!(media.user_volume(Id(7)), MAX_VOLUME);
+		media.reset();
+		assert!(
+			media.is_user_muted(Id(9)),
+			"volumes survive an account switch"
 		);
-		*self = Self::default();
-		(
-			self.voice_inputs,
-			self.voice_outputs,
-			self.voice_input,
-			self.voice_output,
-		) = devices;
 	}
 }

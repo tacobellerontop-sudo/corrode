@@ -11,6 +11,7 @@ use solace_ui::{Solace, clock::snowflake_at, images, scenery};
 const HORIZON: Id = Id(10);
 const BETTER_TOGETHER: Id = Id(301);
 const HANGOUT: Id = Id(306);
+const STUDIO: Id = Id(507);
 
 fn user(id: u64, name: &str) -> User {
 	User {
@@ -183,6 +184,15 @@ pub fn state() -> State {
 		dm.last_message = Some(age);
 		channels.push(dm);
 	}
+	let mut studio = channel(STUDIO.0, None, None, 0, "Studio crew", 3);
+	studio.recipients = vec![
+		people.lina.clone(),
+		people.kai.clone(),
+		people.jun.clone(),
+		people.avery.clone(),
+	];
+	studio.last_message = Some(clock_minutes_ago(8));
+	channels.push(studio);
 	state.apply(Envelope {
 		generation: state.generation,
 		event: Event::Ready {
@@ -426,6 +436,76 @@ pub fn decorate(solace: &mut Solace, ctx: &egui::Context, state: &State) {
 			.find(|m| !m.attachments.is_empty() && m.author.id == Id(101))
 			.map(|m| m.id),
 	);
+}
+
+/// Open the "Studio crew" group call: four people, one sharing a screen and one whose stream
+/// just ended. The offline showcase cannot place real calls, so the call is staged locally.
+pub fn call_scene(state: &mut State, solace: &mut Solace) {
+	let _ = state.select(STUDIO);
+	let me = state.user.as_ref().map_or(Id(100), |u| u.id);
+	let person = |user: u64, muted: bool, streaming: bool| voice::Participant {
+		user: Id(user),
+		muted,
+		deafened: false,
+		server_muted: false,
+		server_deafened: false,
+		video: false,
+		streaming,
+	};
+	let lina = state
+		.channel(STUDIO)
+		.and_then(|c| c.recipients.first())
+		.map_or(101, |u| u.id.0);
+	let others: Vec<u64> = state
+		.channel(STUDIO)
+		.map(|c| c.recipients.iter().map(|u| u.id.0).collect())
+		.unwrap_or_default();
+	let mut participants = vec![person(me.0, false, false)];
+	for (i, user) in others.iter().enumerate() {
+		participants.push(person(*user, i == 2, *user == lina));
+	}
+	state.voice.active = Some(voice::Call {
+		channel: STUDIO,
+		guild: None,
+		connected_at: Some(std::time::Instant::now() - std::time::Duration::from_secs(754)),
+		server_muted: false,
+		server_deafened: false,
+		request: 1,
+		phase: voice::Phase::Connected,
+		muted: false,
+		deafened: false,
+		participants,
+		camera: false,
+		watching: None,
+		error: None,
+	});
+	solace.media.voice_speaking = others.iter().take(1).map(|u| Id(*u)).collect();
+	solace
+		.media
+		.set_user_volume(Id(*others.get(1).unwrap_or(&0)), 140);
+}
+
+/// Stage the last caller's stream: the first call starts watching it, the second ends it.
+/// The preview example uses this to show a stream that has ended.
+#[allow(dead_code)]
+pub fn end_stream(state: &mut State) {
+	let Some(call) = state.voice.active.as_mut() else {
+		return;
+	};
+	if let Some(user) = call.participants.last().map(|p| p.user) {
+		if call.watching.is_none() {
+			// First pass: they are live and being watched.
+			if let Some(p) = call.participants.iter_mut().find(|p| p.user == user) {
+				p.streaming = true;
+			}
+			call.watching = Some(user);
+		} else {
+			if let Some(p) = call.participants.iter_mut().find(|p| p.user == user) {
+				p.streaming = false;
+			}
+			call.watching = None;
+		}
+	}
 }
 
 fn crop_square(image: &ColorImage) -> ColorImage {

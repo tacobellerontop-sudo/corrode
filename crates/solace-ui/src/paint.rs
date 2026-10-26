@@ -414,3 +414,60 @@ pub fn badge(painter: &Painter, center: Pos2, count: u32, p: &Palette) {
 	painter.rect_filled(rect, 9, p.accent);
 	painter.galley(rect.center() - galley.size() / 2.0, galley, p.accent_text);
 }
+
+/// Horizontal volume slider over `0..=max` percent, with a tick at 100%. Dragging or clicking
+/// anywhere on the track sets the value; returns whether it changed.
+#[allow(clippy::too_many_arguments)]
+pub fn slider(
+	ui: &mut Ui,
+	id: Id,
+	rect: Rect,
+	value: &mut u16,
+	max: u16,
+	track: Color32,
+	fill: Color32,
+	knob: Color32,
+) -> Response {
+	let response = ui.interact(rect, id, Sense::click_and_drag());
+	let left = rect.left() + 8.0;
+	let width = (rect.width() - 16.0).max(1.0);
+	if let Some(pos) = response.interact_pointer_pos()
+		&& (response.dragged() || response.clicked() || response.drag_started())
+	{
+		let t = ((pos.x - left) / width).clamp(0.0, 1.0);
+		let mut next = (t * f32::from(max)).round() as u16;
+		// A gentle detent at 100% makes the default easy to find again.
+		if next.abs_diff(100) <= max / 50 {
+			next = 100;
+		}
+		if next != *value {
+			*value = next;
+		}
+	}
+	let t = hover_t(ui, &response);
+	let y = rect.center().y;
+	let bar = Rect::from_min_max(pos2(left, y - 2.5), pos2(left + width, y + 2.5));
+	let painter = ui.painter();
+	painter.rect_filled(bar, 3, track);
+	let at = left + width * (f32::from((*value).min(max)) / f32::from(max.max(1)));
+	painter.rect_filled(Rect::from_min_max(bar.min, pos2(at, bar.max.y)), 3, fill);
+	if max > 100 {
+		let tick = left + width * (100.0 / f32::from(max));
+		painter.line_segment(
+			[pos2(tick, y - 7.0), pos2(tick, y + 7.0)],
+			Stroke::new(1.0, track.gamma_multiply(1.6)),
+		);
+	}
+	let radius = 7.0 + t * 1.5 + if response.dragged() { 1.0 } else { 0.0 };
+	painter.circle_filled(
+		pos2(at, y + 1.0),
+		radius + 1.0,
+		Color32::from_black_alpha(30),
+	);
+	painter.circle_filled(pos2(at, y), radius, knob);
+	painter.circle_stroke(pos2(at, y), radius, Stroke::new(1.0, fill));
+	if response.hovered() || response.dragged() {
+		ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+	}
+	response
+}

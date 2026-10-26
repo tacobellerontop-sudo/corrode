@@ -7,6 +7,7 @@ pub mod fonts;
 pub mod icons;
 pub mod images;
 pub mod media;
+pub mod motion;
 pub mod nav;
 pub mod paint;
 pub mod scenery;
@@ -14,6 +15,8 @@ pub mod text;
 pub mod theme;
 
 mod aside;
+mod call;
+pub mod chrome;
 mod composer;
 mod conversation;
 mod dashboard;
@@ -28,7 +31,7 @@ pub use media::{Media, VoiceGain};
 pub use toasts::{Level, Toasts};
 
 use client_core::{Command, State};
-use egui::{Rect, Ui, UiBuilder, pos2};
+use egui::{Rect, Ui, UiBuilder, pos2, vec2};
 use model::Id;
 use std::collections::{HashMap, HashSet};
 
@@ -111,6 +114,8 @@ pub(crate) struct ScrollMemo {
 	pub offset: f32,
 	pub at_bottom: bool,
 	pub jump_to_bottom: bool,
+	/// Newest message when the conversation finished loading; later ones animate in.
+	pub fresh_after: Option<Id>,
 }
 
 pub struct Solace {
@@ -150,6 +155,7 @@ pub struct Solace {
 	pub(crate) last_read_request: Option<Id>,
 	pub(crate) last_draft: Option<(Id, String)>,
 	pub(crate) draft_dirty: Option<(Id, std::time::Instant)>,
+	pub(crate) call: call::CallView,
 }
 
 impl Default for Solace {
@@ -188,6 +194,7 @@ impl Default for Solace {
 			last_read_request: None,
 			last_draft: None,
 			draft_dirty: None,
+			call: Default::default(),
 		}
 	}
 }
@@ -274,16 +281,23 @@ impl Solace {
 		self.region(ui, rail, "rail", |this, ui| {
 			rail::show(this, ui, state, &mut commands)
 		});
+		// Regions ease in when what they show changes: the sidebar slides over from the
+		// rail, the conversation rises into place, the context column fades.
 		if sidebar_w > 0.0 {
-			self.region(ui, sidebar, "sidebar", |this, ui| {
+			ui.painter().rect_filled(sidebar, 0, p.sidebar);
+			let key = (self.pane as u8, nav::selected_guild(state).map(|g| g.id));
+			self.region_moving(ui, sidebar, "sidebar", key, vec2(-14.0, 0.0), |this, ui| {
 				sidebar::show(this, ui, state, &mut commands)
 			});
 		}
-		self.region(ui, main, "main", |this, ui| {
+		let key = state.selected;
+		self.region_moving(ui, main, "main", key, vec2(0.0, 12.0), |this, ui| {
 			conversation::show(this, ui, state, &mut commands)
 		});
 		if let Some(rect) = aside_rect {
-			self.region(ui, rect, "aside", |this, ui| {
+			ui.painter().rect_filled(rect, 0, p.aside);
+			let key = nav::selected_channel(state).map(|c| c.guild.unwrap_or(c.id));
+			self.region_moving(ui, rect, "aside", key, vec2(10.0, 0.0), |this, ui| {
 				aside::show(this, ui, state, &mut commands)
 			});
 		}
@@ -311,6 +325,28 @@ impl Solace {
 				.layout(egui::Layout::top_down(egui::Align::Min)),
 		);
 		child.set_clip_rect(rect);
+		add(self, &mut child);
+	}
+
+	/// A region whose content eases in (fading, travelling from `from`) whenever `key` changes.
+	fn region_moving(
+		&mut self,
+		ui: &mut Ui,
+		rect: Rect,
+		id: &str,
+		key: impl std::hash::Hash + std::fmt::Debug,
+		from: egui::Vec2,
+		add: impl FnOnce(&mut Self, &mut Ui),
+	) {
+		let t = motion::appear(ui.ctx(), egui::Id::unique((id, "enter", key)), 0.3);
+		let mut child = ui.new_child(
+			UiBuilder::new()
+				.max_rect(rect.translate(from * (1.0 - t)))
+				.id_salt(id)
+				.layout(egui::Layout::top_down(egui::Align::Min)),
+		);
+		child.set_clip_rect(rect);
+		child.multiply_opacity(0.15 + 0.85 * t);
 		add(self, &mut child);
 	}
 

@@ -4,7 +4,7 @@
 use crate::{
 	Pane, Solace, clock,
 	icons::{self, Icon},
-	nav,
+	motion, nav,
 	paint::{self, AvatarShape, ButtonKind},
 	scenery::Mood,
 	sidebar::{conversation_avatar, conversation_title},
@@ -143,27 +143,22 @@ pub fn show(solace: &mut Solace, ui: &mut Ui, state: &mut State, commands: &mut 
 			let left = outer.left() + PAD;
 			let mut y = outer.top() + PAD;
 
-			hero(
-				solace,
-				ui,
-				state,
-				&data,
-				Rect::from_min_size(pos2(left, y), vec2(width, HERO)),
-			);
+			// Cards rise in one after another; `enter` wraps each in a fading child.
+			let hero_rect = Rect::from_min_size(pos2(left, y), vec2(width, HERO));
+			enter(ui, 0, hero_rect, |ui, rect| {
+				hero(solace, ui, state, &data, rect)
+			});
 			y += HERO + GAP;
 
-			stats(
-				solace,
-				ui,
-				&data,
-				Rect::from_min_size(pos2(left, y), vec2(width, TILE)),
-				&p,
-			);
+			let tiles = Rect::from_min_size(pos2(left, y), vec2(width, TILE));
+			stats(solace, ui, &data, tiles, &p);
 			y += TILE + GAP;
 
 			// Messages first, people beside them, servers after.
 			let messages = Rect::from_min_size(pos2(left, y), vec2(left_w, messages_h));
-			messages_card(solace, ui, state, commands, &data.recent, messages, &p);
+			enter(ui, 2, messages, |ui, rect| {
+				messages_card(solace, ui, state, commands, &data.recent, rect, &p)
+			});
 
 			let (right_x, right_y) = if two_columns {
 				(left + left_w + GAP, y)
@@ -171,24 +166,39 @@ pub fn show(solace: &mut Solace, ui: &mut Ui, state: &mut State, commands: &mut 
 				(left, messages.bottom() + GAP)
 			};
 			let online = Rect::from_min_size(pos2(right_x, right_y), vec2(right_w, online_h));
-			online_card(solace, ui, state, commands, &data.online, online, &p);
+			enter(ui, 3, online, |ui, rect| {
+				online_card(solace, ui, state, commands, &data.online, rect, &p)
+			});
 			let rooms =
 				Rect::from_min_size(pos2(right_x, online.bottom() + GAP), vec2(right_w, rooms_h));
-			rooms_card(solace, ui, state, commands, &data.rooms, rooms, &p);
+			enter(ui, 4, rooms, |ui, rect| {
+				rooms_card(solace, ui, state, commands, &data.rooms, rect, &p)
+			});
 
 			let communities =
 				Rect::from_min_size(pos2(left, y + columns_h + GAP), vec2(width, communities_h));
-			communities_card(
-				solace,
-				ui,
-				state,
-				commands,
-				&guilds,
-				per_row,
-				communities,
-				&p,
-			);
+			enter(ui, 5, communities, |ui, rect| {
+				communities_card(solace, ui, state, commands, &guilds, per_row, rect, &p)
+			});
 		});
+}
+
+/// Draw one dashboard section rising and fading in, `order` steps after the first.
+fn enter(ui: &mut Ui, order: usize, rect: Rect, add: impl FnOnce(&mut Ui, Rect)) {
+	let t = motion::appear_after(
+		ui.ctx(),
+		ui.scope_id().with(("dash-enter", order)),
+		order as f32 * 0.06,
+		0.45,
+	);
+	let shown = rect.translate(vec2(0.0, (1.0 - t) * 18.0));
+	let mut child = ui.new_child(
+		egui::UiBuilder::new()
+			.max_rect(shown)
+			.id_salt(("dash-card", order)),
+	);
+	child.multiply_opacity(t);
+	add(&mut child, shown);
 }
 
 fn hero(solace: &mut Solace, ui: &Ui, state: &State, data: &Snapshot, rect: Rect) {
@@ -288,12 +298,31 @@ fn stats(solace: &mut Solace, ui: &mut Ui, data: &Snapshot, rect: Rect, p: &Pale
 	];
 	let w = (rect.width() - 3.0 * 14.0) / 4.0;
 	for (i, (icon, value, label, pane)) in tiles.into_iter().enumerate() {
+		// Each tile rises in after the banner and counts up to its number.
+		let t = motion::appear_after(
+			ui.ctx(),
+			ui.scope_id().with(("stat-enter", i)),
+			0.06 + i as f32 * 0.05,
+			0.5,
+		);
+		let value = value
+			.parse::<f32>()
+			.map_or(value.clone(), |n| ((n * t).round() as u64).to_string());
 		let tile = Rect::from_min_size(
-			rect.min + vec2(i as f32 * (w + 14.0), 0.0),
+			rect.min + vec2(i as f32 * (w + 14.0), (1.0 - t) * 18.0),
 			vec2(w, rect.height()),
 		);
+		let mut tile_ui = ui.new_child(
+			egui::UiBuilder::new()
+				.max_rect(tile)
+				.id_salt(("stat-tile", i)),
+		);
+		tile_ui.multiply_opacity(t);
+		let ui = &mut tile_ui;
 		let response = ui.interact(tile, ui.scope_id().with(("stat", i)), Sense::click());
 		let t = paint::hover_t(ui, &response);
+		// Lift a little under the pointer.
+		let tile = tile.translate(vec2(0.0, -2.0 * t));
 		paint::card(ui.painter(), tile, 16, p);
 		if t > 0.0 {
 			ui.painter()

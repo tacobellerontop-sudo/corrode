@@ -50,12 +50,13 @@ impl Toasts {
 		let mut dismissed = None;
 		for (index, (level, text, at)) in self.items.iter().enumerate().rev() {
 			let age = at.elapsed().as_secs_f32();
-			let fade = (age / 0.18).min(1.0) * ((LIFETIME.as_secs_f32() - age) / 0.4).min(1.0);
+			let fade = crate::motion::ease_out((age / 0.25).min(1.0))
+				* ((LIFETIME.as_secs_f32() - age) / 0.4).clamp(0.0, 1.0);
 			let galley =
 				ctx.fonts_mut(|f| f.layout(text.clone(), theme::medium(13.5), p.text, 420.0));
 			let size = vec2(galley.size().x + 64.0, galley.size().y + 24.0);
 			let rect = Rect::from_center_size(
-				egui::pos2(screen.center().x, y - size.y / 2.0 + (1.0 - fade) * 8.0),
+				egui::pos2(screen.center().x, y - size.y / 2.0 + (1.0 - fade) * 14.0),
 				size,
 			);
 			y -= size.y + 10.0;
@@ -63,6 +64,7 @@ impl Toasts {
 				.order(Order::Tooltip)
 				.fixed_pos(rect.min)
 				.show(ctx, |ui| {
+					ui.multiply_opacity(fade);
 					let (_, response) = ui.allocate_exact_size(size, egui::Sense::click());
 					let painter = ui.painter().with_clip_rect(rect.expand(40.0));
 					paint::floating(&painter, rect, 14, &p);
@@ -99,6 +101,15 @@ impl Toasts {
 		if let Some(index) = dismissed {
 			self.items.remove(index);
 		}
-		ctx.request_repaint_after(Duration::from_millis(100));
+		// Smooth while a toast is entering or leaving; otherwise wake for the next expiry.
+		let moving = self.items.iter().any(|(_, _, at)| {
+			let age = at.elapsed().as_secs_f32();
+			age < 0.3 || age > LIFETIME.as_secs_f32() - 0.5
+		});
+		if moving {
+			ctx.request_repaint();
+		} else {
+			ctx.request_repaint_after(Duration::from_millis(100));
+		}
 	}
 }

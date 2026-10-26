@@ -36,9 +36,34 @@ pub fn show(solace: &mut Solace, ui: &mut Ui, state: &mut State, commands: &mut 
 		pos2(rect.left() + pad, rect.bottom() - pad - composer_height),
 		pos2(rect.right() - pad, rect.bottom() - pad),
 	);
+	let mut top = header.bottom();
+	// A call in this direct conversation takes the stage above the timeline.
+	if crate::call::joined(state, &channel) {
+		let available = composer_rect.bottom() - top;
+		let height = crate::call::stage_height(solace, available);
+		let stage = Rect::from_min_size(
+			pos2(rect.left() + 16.0, top),
+			vec2(
+				rect.width() - 32.0,
+				height - if solace.call.full { 0.0 } else { 6.0 },
+			),
+		);
+		crate::call::show(solace, ui, state, commands, &channel, stage);
+		if solace.call.full {
+			return;
+		}
+		crate::call::divider(solace, ui, stage, available, &p);
+		top = stage.bottom() + 14.0;
+	} else if crate::call::banner_wanted(state, &channel) {
+		let banner = Rect::from_min_size(
+			pos2(rect.left() + pad, top),
+			vec2(rect.width() - 2.0 * pad, crate::call::BANNER),
+		);
+		crate::call::banner(solace, ui, state, commands, &channel, banner);
+		top = banner.bottom() + 10.0;
+	}
 	// On roomy windows the community banner stays pinned above the conversation.
 	let pinned_hero = channel.guild.is_some() && rect.height() >= 760.0;
-	let mut top = header.bottom();
 	if pinned_hero {
 		let hero_rect = Rect::from_min_size(
 			pos2(rect.left() + pad, top),
@@ -251,8 +276,12 @@ fn more_menu(
 	items.push((Icon::Settings, "Settings", 3));
 	let width = 230.0;
 	let height = items.len() as f32 * 38.0 + 12.0;
+	let a = crate::motion::appear(ui.ctx(), egui::Id::unique("more-menu-enter"), 0.16);
 	let rect = Rect::from_min_size(
-		pos2(anchor.right() - width, anchor.bottom() + 8.0),
+		pos2(
+			anchor.right() - width,
+			anchor.bottom() + 8.0 - (1.0 - a) * 8.0,
+		),
 		vec2(width, height),
 	);
 	let mut chosen = None;
@@ -260,6 +289,7 @@ fn more_menu(
 		.order(egui::Order::Foreground)
 		.fixed_pos(rect.min)
 		.show(ui.ctx(), |ui| {
+			ui.multiply_opacity(a);
 			let (_, _) = ui.allocate_exact_size(rect.size(), Sense::hover());
 			paint::floating(ui.painter(), rect, 14, &p);
 			for (i, (icon, label, key)) in items.iter().enumerate() {
@@ -428,11 +458,50 @@ fn timeline_view(
 		let mut y = 0.0;
 		for (row, height) in rows.iter().zip(&heights) {
 			let row_rect = Rect::from_min_size(origin + vec2(0.0, y), vec2(width, *height));
-			if y + height >= viewport.min.y - 200.0
-				&& y <= viewport.max.y + 200.0
-				&& let Some(id) = paint_row(solace, ui, state, commands, row, row_rect, &replies, p)
-			{
-				hovered_message = Some(id);
+			if y + height >= viewport.min.y - 200.0 && y <= viewport.max.y + 200.0 {
+				// Messages that arrive while the conversation is open (and ones you send)
+				// rise into place; the history that was already here does not.
+				let entering = match row {
+					Row::Message { id, .. }
+						if solace.scroll.fresh_after.is_some_and(|after| *id > after)
+							&& state.timeline.get_display(*id).is_some_and(|m| {
+								state.user.as_ref().is_none_or(|own| own.id != m.author.id)
+							}) =>
+					{
+						Some(egui::Id::unique(("message-in", *id)))
+					}
+					Row::Pending(index) => state
+						.pending
+						.get(*index)
+						.map(|pending| egui::Id::unique(("pending-in", pending.nonce.clone()))),
+					_ => None,
+				}
+				.map(|key| crate::motion::once(ui.ctx(), key, 0.32))
+				.filter(|t| *t < 1.0);
+				let hovered = match entering {
+					Some(t) => {
+						let mut row_ui = ui.new_child(
+							egui::UiBuilder::new()
+								.max_rect(row_rect.translate(vec2(0.0, (1.0 - t) * 14.0)))
+								.id_salt(("row-in", y as i64)),
+						);
+						row_ui.multiply_opacity(t);
+						paint_row(
+							solace,
+							&mut row_ui,
+							state,
+							commands,
+							row,
+							row_rect.translate(vec2(0.0, (1.0 - t) * 14.0)),
+							&replies,
+							p,
+						)
+					}
+					None => paint_row(solace, ui, state, commands, row, row_rect, &replies, p),
+				};
+				if let Some(id) = hovered {
+					hovered_message = Some(id);
+				}
 			}
 			y += height;
 		}
@@ -452,6 +521,9 @@ fn timeline_view(
 	let viewport_h = output.inner_rect.height();
 	solace.scroll.at_bottom = output.state.offset.y + viewport_h >= total - 24.0;
 
+	if solace.scroll.fresh_after.is_none() && !state.history_pending {
+		solace.scroll.fresh_after = Some(state.timeline.row_ids().next_back().unwrap_or(Id(0)));
+	}
 	// Older history when the reader nears the top.
 	let first = state.timeline.row_ids().next();
 	let latest = state.timeline.row_ids().next_back();

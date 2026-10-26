@@ -22,6 +22,7 @@ mod history;
 mod notification_runtime;
 #[allow(dead_code)]
 mod notification_sounds;
+mod preferences;
 mod screen;
 #[cfg(feature = "demo")]
 mod showcase;
@@ -69,7 +70,9 @@ fn main() -> eframe::Result {
 			.with_inner_size([1440.0, 920.0])
 			.with_min_inner_size([860.0, 560.0])
 			.with_app_id(APP_ID)
-			.with_icon(app_icon()),
+			.with_icon(app_icon())
+			// Solace draws its own title bar and resize edges.
+			.with_decorations(false),
 		renderer: eframe::Renderer::Wgpu,
 		wgpu_options: eframe::egui_wgpu::WgpuConfiguration {
 			wgpu_setup: eframe::egui_wgpu::WgpuSetup::CreateNew(
@@ -202,6 +205,7 @@ struct Desktop {
 	roster_failed: bool,
 	roster_generation: Option<u64>,
 	draft_restore_pending: bool,
+	preferences: preferences::Preferences,
 	/// A close was refused once because of unsent work; the next close within this window wins.
 	close_warned: Option<std::time::Instant>,
 	token_input: Zeroizing<String>,
@@ -233,6 +237,9 @@ impl Desktop {
 		if demo {
 			state = showcase::state();
 			showcase::decorate(&mut solace, &cc.egui_ctx, &state);
+			if std::env::args().any(|arg| arg == "--demo-call") {
+				showcase::call_scene(&mut state, &mut solace);
+			}
 			if std::env::args().any(|arg| arg == "--demo-dark") {
 				cc.egui_ctx.set_theme(egui::ThemePreference::Dark);
 				solace.theme = egui::ThemePreference::Dark;
@@ -247,6 +254,7 @@ impl Desktop {
 			for operation in [
 				cache::Operation::LoadAppearance,
 				cache::Operation::LoadAccounts,
+				cache::Operation::LoadAppPreferences,
 			] {
 				cache_pending +=
 					usize::from(cache.queue(state.generation, model::Id(0), operation));
@@ -299,6 +307,7 @@ impl Desktop {
 			roster_failed: false,
 			roster_generation: None,
 			draft_restore_pending: false,
+			preferences: Default::default(),
 			close_warned: None,
 			token_input: Zeroizing::new(String::new()),
 			authorized: false,
@@ -1248,6 +1257,17 @@ impl Desktop {
 				cache::Outcome::GifFavorites(favorites) if generation == self.state.generation => {
 					self.state.restore_gif_favorites(favorites);
 				}
+				cache::Outcome::AppPreferences(Ok(loaded)) => {
+					self.preferences.loaded(*loaded, &mut self.solace.media);
+				}
+				// Unreadable preferences are left alone: other settings live in the same record.
+				cache::Outcome::AppPreferences(Err(_)) => {
+					self.cache_status = "Could not read voice settings; changes last this session";
+				}
+				cache::Outcome::AppPreferencesSaved(Err(_)) => {
+					self.cache_error = true;
+					self.cache_status = "Could not save voice settings; changes last this session";
+				}
 				// Preferences this interface does not expose, saves and stale results.
 				_ => {}
 			}
@@ -1676,6 +1696,12 @@ impl eframe::App for Desktop {
 			worker.request(avatar_key);
 		}
 		self.poll_media(ctx);
+		if let Some(value) = self.preferences.poll(&self.solace.media, ctx) {
+			self.queue_cache_for(
+				model::Id(0),
+				cache::Operation::SaveAppPreferences(Box::new(value)),
+			);
+		}
 		// Push to talk: hold V while Solace has focus and no text field is active.
 		self.solace.media.voice_ptt_active = self.solace.media.voice_push_to_talk
 			&& self.state.voice.active.is_some()
@@ -1710,6 +1736,18 @@ impl eframe::App for Desktop {
 			}
 		}
 		self.sync_uploads(&ctx, dropped);
+
+		// Discord's login page has its own header strip that doubles as the title bar.
+		let window = ui.max_rect();
+		let body = if self.login.is_some() {
+			window
+		} else {
+			solace_ui::chrome::title_bar(ui, window, "Solace")
+		};
+		let mut body_ui =
+			ui.new_child(egui::UiBuilder::new().max_rect(body).id_salt("window-body"));
+		body_ui.set_clip_rect(body);
+		let ui = &mut body_ui;
 
 		if self.login.is_some() {
 			let full = ui.max_rect();
@@ -1798,5 +1836,6 @@ impl eframe::App for Desktop {
 		}
 		self.request_images(&ctx);
 		self.sync_account_roster();
+		solace_ui::chrome::resize_edges(&ctx);
 	}
 }

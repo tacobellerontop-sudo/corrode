@@ -29,6 +29,24 @@ pub fn show(solace: &mut Solace, ui: &mut Ui, state: &mut State, _commands: &mut
 		(Pane::Activity, Icon::Sparkle, "Activity"),
 	];
 	let mut y = rect.top() + 124.0;
+	// The selection pill glides between collections instead of jumping.
+	let index = items
+		.iter()
+		.position(|(pane, ..)| *pane == solace.pane)
+		.unwrap_or(0) as f32;
+	let pill_y =
+		ui.ctx()
+			.animate_value_with_time(ui.scope_id().with("rail-pill"), y + index * 56.0, 0.22);
+	ui.painter().rect_filled(
+		Rect::from_center_size(pos2(x, pill_y), vec2(48.0, 48.0)),
+		14,
+		p.selected,
+	);
+	ui.painter().rect_filled(
+		Rect::from_center_size(pos2(rect.left() + 3.0, pill_y), vec2(4.0, 22.0)),
+		2,
+		p.accent,
+	);
 	for (pane, icon, label) in items {
 		let item = Rect::from_center_size(pos2(x, y), vec2(48.0, 48.0));
 		let response = ui
@@ -36,12 +54,17 @@ pub fn show(solace: &mut Solace, ui: &mut Ui, state: &mut State, _commands: &mut
 			.on_hover_text(label);
 		let active = solace.pane == pane;
 		let t = paint::hover_t(ui, &response);
-		let fill = if active {
-			p.selected
-		} else {
-			mix(p.rail, p.hover, t)
-		};
-		ui.painter().rect_filled(item, 14, fill);
+		if !active && t > 0.0 {
+			ui.painter()
+				.rect_filled(item, 14, p.hover.gamma_multiply(t));
+		}
+		// Icons dip slightly while pressed.
+		let press = ui.ctx().animate_bool_with_time(
+			response.id.with("press"),
+			response.is_pointer_button_down_on(),
+			0.08,
+		);
+		let item = item.shrink(press * 2.0);
 		let color = if active {
 			p.text
 		} else {

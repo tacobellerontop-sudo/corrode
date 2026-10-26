@@ -51,6 +51,14 @@ pub enum Icon {
 	Download,
 	Play,
 	Pause,
+	Screen,
+	Expand,
+	Collapse,
+	SpeakerOff,
+	Sliders,
+	WindowMinimize,
+	WindowMaximize,
+	WindowRestore,
 }
 
 struct Pen<'a> {
@@ -406,6 +414,53 @@ fn draw(pen: &Pen, icon: Icon) {
 		Icon::Pause => {
 			pen.fill(&[(7.0, 5.5), (10.5, 5.5), (10.5, 18.5), (7.0, 18.5)]);
 			pen.fill(&[(13.5, 5.5), (17.0, 5.5), (17.0, 18.5), (13.5, 18.5)]);
+		}
+		Icon::Screen => {
+			pen.rounded(3.0, 4.5, 18.0, 12.0, 2.2);
+			pen.line(&[(9.0, 20.0), (15.0, 20.0)]);
+			pen.line(&[(12.0, 16.5), (12.0, 20.0)]);
+		}
+		Icon::Expand => {
+			pen.line(&[(14.0, 4.5), (19.5, 4.5), (19.5, 10.0)]);
+			pen.line(&[(19.5, 4.5), (13.5, 10.5)]);
+			pen.line(&[(10.0, 19.5), (4.5, 19.5), (4.5, 14.0)]);
+			pen.line(&[(4.5, 19.5), (10.5, 13.5)]);
+		}
+		Icon::Collapse => {
+			pen.line(&[(13.5, 5.0), (13.5, 10.5), (19.0, 10.5)]);
+			pen.line(&[(13.5, 10.5), (19.5, 4.5)]);
+			pen.line(&[(10.5, 19.0), (10.5, 13.5), (5.0, 13.5)]);
+			pen.line(&[(10.5, 13.5), (4.5, 19.5)]);
+		}
+		Icon::SpeakerOff => {
+			pen.closed(&[
+				(4.0, 9.5),
+				(8.0, 9.5),
+				(12.5, 5.5),
+				(12.5, 18.5),
+				(8.0, 14.5),
+				(4.0, 14.5),
+			]);
+			pen.line(&[(15.5, 9.5), (20.5, 14.5)]);
+			pen.line(&[(20.5, 9.5), (15.5, 14.5)]);
+		}
+		Icon::Sliders => {
+			for (y, knob) in [(6.5, 15.0), (12.0, 8.5), (17.5, 13.0)] {
+				pen.line(&[(4.0, y), (20.0, y)]);
+				pen.dot(knob, y, 2.4);
+			}
+		}
+		Icon::WindowMinimize => pen.line(&[(6.5, 12.5), (17.5, 12.5)]),
+		Icon::WindowMaximize => pen.rounded(6.5, 6.5, 11.0, 11.0, 1.2),
+		Icon::WindowRestore => {
+			pen.rounded(6.0, 8.5, 9.5, 9.5, 1.2);
+			pen.line(&[
+				(8.5, 8.5),
+				(8.5, 6.0),
+				(18.0, 6.0),
+				(18.0, 15.5),
+				(15.5, 15.5),
+			]);
 		}
 		Icon::Globe => {
 			pen.circle(12.0, 12.0, 9.0);

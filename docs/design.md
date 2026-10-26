@@ -14,7 +14,21 @@ egui's editor with Solace's own frames and colours).
 | Conversation | flexible | Header (icon, title, breadcrumb, People/Voice/More), pinned community banner, timeline, composer |
 | Context | 326, hidden below 1180 | Voice Room card, Members, Community info, profile card |
 
-Home is a full-width dashboard with no sidebar, led by direct messages: a greeting banner, stat tiles (unread messages, DM mentions, friends online, recent conversations), Messages and Online now, then Live in voice and Your communities. Opening a conversation from it moves to the Direct or Communities pane. The Thread panel floats over the right of the conversation. Below 760 px of height the
+Home is a full-width dashboard with no sidebar, led by direct messages: a greeting banner, stat tiles (unread messages, DM mentions, friends online, recent conversations), Messages and Online now, then Live in voice and Your communities. Opening a conversation from it moves to the Direct or Communities pane.
+
+The window has no system frame: a 36 px title bar (drag to move, double-click to maximize, minimize / maximize / close) and 5 px resize edges are painted by `chrome.rs`.
+
+## Calls
+
+Joining a call in a direct or group conversation opens a dark stage above the timeline
+(`call.rs`). Everyone gets a 16:9 tile with their avatar or camera, a name chip with mute
+marks and a green ring while they talk. Screen shares get their own tiles: Watch Stream,
+the live picture, or "This stream has ended." with Close Stream. Click a tile to focus it,
+drag the divider to resize the stage, or fill the window with it. The control bar has mute,
+deafen, camera, volume, focus and leave. Volume opens output, input and stream sliders; a
+tile's speaker button (or a right-click) sets that person's volume (0–200%) or mutes them
+for you only. Volumes and devices are saved with the app preferences. A call you are not in
+shows a Join banner. The Thread panel floats over the right of the conversation. Below 760 px of height the
 community banner scrolls with the timeline instead of staying pinned.
 
 ## Tokens
@@ -58,5 +72,8 @@ any scale and inherit palette colours. There is no icon font or atlas.
 
 ## Motion
 
-Hover states ease over 120 ms; typing dots and loading indicators animate only while visible
-and request repaints only for as long as they run.
+Hover states ease over 120 ms. The sidebar, conversation and context column ease in when
+what they show changes; the rail's selection pill glides between panes; dashboard cards rise
+in one after another and their numbers count up; dialogs, menus and the thread panel fade
+and settle into place; new messages and call tiles rise in. `motion.rs` times entrances
+from when something first appears, and repaints are requested only while one is running.
