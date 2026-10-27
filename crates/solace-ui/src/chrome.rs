@@ -94,6 +94,10 @@ pub fn window_buttons(ui: &mut Ui, rect: Rect) -> f32 {
 
 /// The title bar across the top of `full`; returns the area below it.
 pub fn title_bar(ui: &mut Ui, full: Rect, title: &str) -> Rect {
+	// Full screen has no window to move or resize: give the content every pixel.
+	if ui.input(|i| i.viewport().fullscreen.unwrap_or(false)) {
+		return full;
+	}
 	let p = theme::palette(ui.ctx());
 	let bar = Rect::from_min_size(full.min, vec2(full.width(), TITLE_BAR));
 	ui.painter().rect_filled(bar, 0, p.rail);

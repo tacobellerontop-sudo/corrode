@@ -253,3 +253,54 @@ fn idle_interface_stops_requesting_frames() {
 		"a call with someone talking redraws every frame"
 	);
 }
+
+#[test]
+fn focus_mode_toggles_with_the_shortcut_and_leaves_on_escape() {
+	let ctx = egui::Context::default();
+	install(&ctx).unwrap();
+	let mut solace = Solace::default();
+	let mut state = test_support::demo_state();
+	let _ = state.select(nav::landing(&state, state.guilds[0].id).unwrap());
+	let run =
+		|events: Vec<egui::Event>, solace: &mut Solace, state: &mut client_core::State| {
+			let input = egui::RawInput {
+				screen_rect: Some(Rect::from_min_size(
+					egui::Pos2::ZERO,
+					egui::vec2(1400.0, 900.0),
+				)),
+				events,
+				..Default::default()
+			};
+			let mut output = ctx.run_ui(input, |ui| {
+				let _ = solace.show(ui, state);
+			});
+			output.textures_delta.clear();
+		};
+	let key = |key, modifiers| egui::Event::Key {
+		key,
+		physical_key: None,
+		pressed: true,
+		repeat: false,
+		modifiers,
+	};
+	let shortcut = egui::Modifiers::COMMAND | egui::Modifiers::SHIFT;
+	run(vec![key(egui::Key::F, shortcut)], &mut solace, &mut state);
+	assert!(solace.focus, "Ctrl+Shift+F enters focus mode");
+	// The conversation fills the window without the rail, sidebar or details.
+	run(vec![], &mut solace, &mut state);
+	run(
+		vec![key(egui::Key::Escape, egui::Modifiers::NONE)],
+		&mut solace,
+		&mut state,
+	);
+	assert!(!solace.focus, "Esc leaves focus mode");
+	// Esc that closes the thread panel does not also leave focus mode.
+	solace.set_focus(true);
+	solace.open_thread(state.timeline.display_iter().next().map(|m| m.id));
+	run(
+		vec![key(egui::Key::Escape, egui::Modifiers::NONE)],
+		&mut solace,
+		&mut state,
+	);
+	assert!(solace.focus);
+}

@@ -11,7 +11,7 @@ use client_core::{Command, State};
 use egui::{Align2, Key, Rect, Response, Sense, TextEdit, Ui, pos2, vec2};
 use model::{Channel, Guild, Id};
 
-const SEARCH_ID: &str = "solace-search";
+pub(crate) const SEARCH_ID: &str = "solace-search";
 
 pub fn show(solace: &mut Solace, ui: &mut Ui, state: &mut State, commands: &mut Vec<Command>) {
 	let p = theme::palette(ui.ctx());

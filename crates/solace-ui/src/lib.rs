@@ -156,6 +156,8 @@ pub struct Solace {
 	pub(crate) last_draft: Option<(Id, String)>,
 	pub(crate) draft_dirty: Option<(Id, std::time::Instant)>,
 	pub(crate) call: call::CallView,
+	/// Focus mode: the conversation fills the window; rail, sidebar and details hide.
+	pub(crate) focus: bool,
 }
 
 impl Default for Solace {
@@ -195,6 +197,7 @@ impl Default for Solace {
 			last_draft: None,
 			draft_dirty: None,
 			call: Default::default(),
+			focus: false,
 		}
 	}
 }
@@ -220,6 +223,11 @@ impl Solace {
 		);
 		*self = Self::default();
 		(self.accounts, self.theme, self.demo, self.toasts) = keep;
+	}
+
+	/// Make the call stage of the open conversation fill the window (its expand button).
+	pub fn fill_window_with_call(&mut self, full: bool) {
+		self.call.full = full;
 	}
 
 	/// Open the settings dialog on a page.
@@ -248,21 +256,26 @@ impl Solace {
 			self.on_navigate(state);
 		}
 
+		self.focus_keys(ui.ctx(), state);
+		// A call stage that fills the window is focus mode too; it ends with the call.
+		let in_call = nav::selected_channel(state).is_some_and(|c| call::joined(state, c));
+		if self.call.full && !in_call {
+			self.call.full = false;
+		}
+		let focused = state.selected.is_some() && (self.focus || self.call.full);
 		let width = full.width();
 		// The dashboard uses the full width; the context column belongs to a conversation.
-		let aside = self.aside_open && width >= 1180.0 && state.selected.is_some();
+		let aside = self.aside_open && width >= 1180.0 && state.selected.is_some() && !focused;
 		// Home is the dashboard alone; the sidebar belongs to the other panes.
-		let sidebar_w = if self.pane == Pane::Home {
+		let sidebar_w = if self.pane == Pane::Home || focused {
 			0.0
 		} else if width < 900.0 {
 			232.0
 		} else {
 			theme::size::SIDEBAR
 		};
-		let rail = Rect::from_min_max(
-			full.min,
-			pos2(full.left() + theme::size::RAIL, full.bottom()),
-		);
+		let rail_w = if focused { 0.0 } else { theme::size::RAIL };
+		let rail = Rect::from_min_max(full.min, pos2(full.left() + rail_w, full.bottom()));
 		let sidebar = Rect::from_min_max(
 			pos2(rail.right(), full.top()),
 			pos2(rail.right() + sidebar_w, full.bottom()),
@@ -278,9 +291,11 @@ impl Solace {
 			pos2(aside_rect.map_or(full.right(), |r| r.left()), full.bottom()),
 		);
 
-		self.region(ui, rail, "rail", |this, ui| {
-			rail::show(this, ui, state, &mut commands)
-		});
+		if !focused {
+			self.region(ui, rail, "rail", |this, ui| {
+				rail::show(this, ui, state, &mut commands)
+			});
+		}
 		// Regions ease in when what they show changes: the sidebar slides over from the
 		// rail, the conversation rises into place, the context column fades.
 		if sidebar_w > 0.0 {
@@ -290,7 +305,8 @@ impl Solace {
 				sidebar::show(this, ui, state, &mut commands)
 			});
 		}
-		let key = state.selected;
+		// Entering or leaving focus mode eases the conversation into its new width.
+		let key = (state.selected, focused);
 		self.region_moving(ui, main, "main", key, vec2(0.0, 12.0), |this, ui| {
 			conversation::show(this, ui, state, &mut commands)
 		});
@@ -315,6 +331,56 @@ impl Solace {
 			self.toasts.push(Level::Info, status);
 		}
 		commands
+	}
+
+	/// Ctrl+Shift+F toggles focus mode and F11 full screen; Esc leaves them (and a
+	/// full-window call) unless a dialog, menu or edit is using Esc itself.
+	fn focus_keys(&mut self, ctx: &egui::Context, state: &State) {
+		let toggle = ctx.input_mut(|i| {
+			i.consume_key(
+				egui::Modifiers::COMMAND | egui::Modifiers::SHIFT,
+				egui::Key::F,
+			)
+		});
+		if toggle && state.selected.is_some() {
+			self.set_focus(!self.focus);
+		}
+		let overlay = self.settings.is_some()
+			|| self.picker.is_some()
+			|| self.link.is_some()
+			|| self.join.is_some()
+			|| self.account_menu
+			|| self.more_menu
+			|| self.editing.is_some()
+			// These close on Esc first: the thread panel, a reply being written, the call's
+			// volume popovers and the search field.
+			|| self.thread.is_some()
+			|| state.reply.is_some()
+			|| self.call.popover_open()
+			|| ctx.memory(|m| m.has_focus(egui::Id::unique(sidebar::SEARCH_ID)));
+		let fullscreen = ctx.input(|i| i.viewport().fullscreen.unwrap_or(false));
+		if ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::F11)) {
+			ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(!fullscreen));
+		}
+		if !overlay
+			&& (self.focus || self.call.full || fullscreen)
+			&& ctx.input(|i| i.key_pressed(egui::Key::Escape))
+		{
+			self.focus = false;
+			self.call.full = false;
+			if fullscreen {
+				ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(false));
+			}
+		}
+	}
+
+	/// Focus mode: the open conversation fills the window (also Ctrl+Shift+F).
+	pub fn set_focus(&mut self, focus: bool) {
+		if focus && !self.focus {
+			self.toasts
+				.push(Level::Info, "Focus mode · Esc or Ctrl+Shift+F to leave");
+		}
+		self.focus = focus;
 	}
 
 	fn region(&mut self, ui: &mut Ui, rect: Rect, id: &str, add: impl FnOnce(&mut Self, &mut Ui)) {

@@ -52,6 +52,13 @@ pub(crate) struct CallView {
 	focus: Option<Tile>,
 }
 
+impl CallView {
+	/// A volume popover is open (it closes on Esc before anything else does).
+	pub(crate) fn popover_open(&self) -> bool {
+		self.volume.is_some() || self.levels.is_some()
+	}
+}
+
 /// The stage keeps night colors in both themes, like a theatre with the lights down.
 struct Stage {
 	back: Color32,
@@ -533,13 +540,42 @@ pub(crate) fn show(
 		if solace.call.full {
 			"Show the conversation"
 		} else {
-			"Fill the window with the call"
+			"Fill the window with the call (Esc to leave)"
 		},
 		&s,
 	)
 	.clicked()
 	{
 		solace.call.full = !solace.call.full;
+	}
+	// True full screen hides the window's own edges too (F11 anywhere).
+	let fullscreen = ui.input(|i| i.viewport().fullscreen.unwrap_or(false));
+	let screen = full.translate(vec2(-44.0, 0.0));
+	if control(
+		ui,
+		ui.scope_id().with("call-fullscreen"),
+		screen,
+		if fullscreen {
+			Icon::WindowRestore
+		} else {
+			Icon::WindowMaximize
+		},
+		fullscreen,
+		false,
+		if fullscreen {
+			"Leave full screen (F11)"
+		} else {
+			"Full screen (F11)"
+		},
+		&s,
+	)
+	.clicked()
+	{
+		if !fullscreen {
+			solace.call.full = true;
+		}
+		ui.ctx()
+			.send_viewport_cmd(egui::ViewportCommand::Fullscreen(!fullscreen));
 	}
 
 	// Tiles.

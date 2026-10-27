@@ -27,6 +27,11 @@ pub fn show(solace: &mut Solace, ui: &mut Ui, state: &mut State, commands: &mut 
 		crate::dashboard::show(solace, ui, state, commands);
 		return;
 	};
+	// A call made to fill the window takes everything, header included.
+	if solace.call.full && crate::call::joined(state, &channel) {
+		crate::call::show(solace, ui, state, commands, &channel, rect.shrink(10.0));
+		return;
+	}
 	let header = Rect::from_min_size(rect.min, vec2(rect.width(), theme::size::HEADER));
 	header_bar(solace, ui, state, commands, &channel, header, &p);
 
@@ -43,15 +48,9 @@ pub fn show(solace: &mut Solace, ui: &mut Ui, state: &mut State, commands: &mut 
 		let height = crate::call::stage_height(solace, available);
 		let stage = Rect::from_min_size(
 			pos2(rect.left() + 16.0, top),
-			vec2(
-				rect.width() - 32.0,
-				height - if solace.call.full { 0.0 } else { 6.0 },
-			),
+			vec2(rect.width() - 32.0, height - 6.0),
 		);
 		crate::call::show(solace, ui, state, commands, &channel, stage);
-		if solace.call.full {
-			return;
-		}
 		crate::call::divider(solace, ui, stage, available, &p);
 		top = stage.bottom() + 14.0;
 	} else if crate::call::banner_wanted(state, &channel) {
@@ -142,7 +141,7 @@ fn header_bar(
 		}
 	};
 	let text_left = icon.right() + 14.0;
-	let buttons_left = rect.right() - 24.0 - 3.0 * 44.0 - 2.0 * 10.0;
+	let buttons_left = rect.right() - 24.0 - 4.0 * 44.0 - 3.0 * 10.0;
 	let max = buttons_left - text_left - 16.0;
 	paint::text_left(
 		ui.painter(),
@@ -239,6 +238,27 @@ fn header_bar(
 	);
 	if people.clicked() {
 		solace.aside_open = !solace.aside_open;
+	}
+	x -= 54.0;
+	let focus = paint::icon_button(
+		ui,
+		ui.scope_id().with("hdr-focus"),
+		Rect::from_center_size(pos2(x, y), vec2(44.0, 44.0)),
+		if solace.focus {
+			Icon::Collapse
+		} else {
+			Icon::Expand
+		},
+		ButtonKind::Soft,
+		solace.focus,
+		if solace.focus {
+			"Show the sidebars (Esc)"
+		} else {
+			"Focus on this conversation (Ctrl+Shift+F)"
+		},
+	);
+	if focus.clicked() {
+		solace.set_focus(!solace.focus);
 	}
 	if solace.more_menu {
 		more_menu(solace, ui, state, commands, channel, more.rect);

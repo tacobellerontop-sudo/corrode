@@ -148,6 +148,13 @@ fn main() -> eframe::Result {
 				solace.open_thread(None);
 				showcase::call_scene(&mut state, &mut solace);
 			}
+			if args.iter().any(|a| a == "--focus") {
+				solace.open_thread(None);
+				solace.set_focus(true);
+			}
+			if args.iter().any(|a| a == "--call-full") {
+				solace.fill_window_with_call(true);
+			}
 			if args.iter().any(|a| a == "--settings-voice") {
 				solace.open_settings(solace_ui::SettingsPage::Voice);
 			}

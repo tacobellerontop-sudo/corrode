@@ -16,6 +16,11 @@ egui's editor with Solace's own frames and colours).
 
 Home is a full-width dashboard with no sidebar, led by direct messages: a greeting banner, stat tiles (unread messages, DM mentions, friends online, recent conversations), Messages and Online now, then Live in voice and Your communities. Opening a conversation from it moves to the Direct or Communities pane.
 
+Focus mode (the expand button in a conversation's header, or Ctrl+Shift+F) hides the rail,
+sidebar and context column so the conversation fills the window; Esc leaves it. A joined
+call's expand button fills the whole window with the stage, and its full-screen button (or
+F11 anywhere) goes true full screen without the title bar.
+
 The window has no system frame: a 36 px title bar (drag to move, double-click to maximize, minimize / maximize / close) and 5 px resize edges are painted by `chrome.rs`.
 
 ## Calls
