@@ -142,7 +142,7 @@ async fn exchange() {
 	let (playback_tx, playback_rx) = std::sync::mpsc::sync_channel(8);
 	let (picture_tx, picture_rx) = std::sync::mpsc::sync_channel(1);
 	let sink: VideoSink = Arc::new(move |frame| {
-		let _ = picture_tx.try_send((frame.user, frame.width, frame.height, frame.rgba.len()));
+		let _ = picture_tx.try_send((frame.user, frame.width, frame.height, frame.i420.len()));
 	});
 	let viewer = tokio::spawn(async move {
 		run_stream_inner(

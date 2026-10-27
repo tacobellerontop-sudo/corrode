@@ -91,3 +91,8 @@ scene). The real cost is how many frames are drawn, so an idle window draws none
   priority and asks for Windows Efficiency mode (`platform::priority`), so a game in front
   gets the CPU first. Focus or a call restores normal scheduling at once.
 - `tests::idle_interface_stops_requesting_frames` fails if an idle view keeps redrawing.
+- Watched streams stay in YUV until the GPU: decoders hand over I420 planes (a byte copy),
+  `apps/desktop/src/video_gpu.rs` uploads them (1.5 bytes a pixel, not 4) and `yuv.wgsl`
+  converts the colour. Per-pixel colour math on the CPU used to cost about 40 ms per 1080p
+  frame; the remaining CPU work is about 1 ms of copying. Camera tiles use a fixed-point
+  CPU conversion. `tests/shaders.rs` validates the WGSL with naga.

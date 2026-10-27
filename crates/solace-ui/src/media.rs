@@ -3,6 +3,13 @@
 use client_core::screen::{Settings, Source, SourceId};
 use model::Id;
 
+/// A video picture the interface can draw: a texture and its size in pixels.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct VideoView {
+	pub texture: egui::TextureId,
+	pub size: egui::Vec2,
+}
+
 /// Highest playback or capture volume, in percent.
 pub const MAX_VOLUME: u16 = 200;
 /// Per-person overrides (volumes plus local mutes) the mixer and preferences hold.
@@ -66,7 +73,8 @@ pub struct Media {
 	pub camera_test_status: &'static str,
 	pub camera_test_texture: Option<egui::TextureHandle>,
 	pub voice_remote_video: Vec<(Id, egui::TextureHandle)>,
-	pub voice_stream_view: Option<egui::TextureHandle>,
+	/// The watched stream's latest picture, converted on the GPU by the desktop.
+	pub voice_stream_view: Option<VideoView>,
 	pub voice_stream_status: &'static str,
 	pub voice_inputs: Vec<(String, String)>,
 	pub voice_outputs: Vec<(String, String)>,

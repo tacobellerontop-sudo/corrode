@@ -16,11 +16,24 @@ pub mod live;
 /// Largest live access unit any backend accepts.
 pub const MAX_ACCESS_UNIT: usize = 2 * 1024 * 1024 + 64 * 1024;
 
-/// One decoded live picture, tightly packed RGBA.
+/// One decoded live picture as tightly packed I420 (see [`i420_len`]). Colour conversion is
+/// left to the consumer, which can do it on the GPU instead of per pixel on the CPU.
 pub struct LiveFrame {
 	pub width: u32,
 	pub height: u32,
-	pub rgba: Vec<u8>,
+	pub i420: Vec<u8>,
+}
+
+/// Size of one chroma plane of a `width × height` I420 picture: half resolution, rounded up.
+pub const fn chroma_size(width: usize, height: usize) -> (usize, usize) {
+	(width.div_ceil(2), height.div_ceil(2))
+}
+
+/// Bytes in a tightly packed I420 picture: the full-size luma (Y) plane, then the U and V
+/// planes at [`chroma_size`].
+pub const fn i420_len(width: usize, height: usize) -> usize {
+	let (cw, ch) = chroma_size(width, height);
+	width * height + 2 * cw * ch
 }
 
 /// Receives live pictures from the decoder's own thread, in decode order.

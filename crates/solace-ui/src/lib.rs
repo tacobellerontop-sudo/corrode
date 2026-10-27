@@ -27,7 +27,7 @@ pub mod signin;
 mod thread;
 mod toasts;
 
-pub use media::{Media, VoiceGain};
+pub use media::{Media, VideoView, VoiceGain};
 pub use toasts::{Level, Toasts};
 
 use client_core::{Command, State};

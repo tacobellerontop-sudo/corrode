@@ -1,5 +1,5 @@
 //! Incoming H.264 video: RFC 6184 depacketizing per remote SSRC and software decoding on a
-//! dedicated thread. Frames stay bounded (1080p RGBA) and no video is ever written to disk.
+//! dedicated thread. Frames stay bounded (1080p I420) and no video is ever written to disk.
 //! Discord's video signaling is unofficial; live interoperability is unverified.
 use std::{
 	collections::HashMap,
@@ -26,12 +26,70 @@ const MAX_PIXELS: u64 = 1920 * 1080;
 const START_CODE: [u8; 4] = [0, 0, 0, 1];
 const MAX_DECODE_AGE: Duration = Duration::from_millis(150);
 
-/// One decoded remote picture, packed RGBA.
+/// One decoded remote picture as tightly packed I420 planes (luma, then half-size U and V;
+/// see [`platform::video::i420_len`]). Consumers convert colour themselves: on the GPU when
+/// they can, or with [`RemoteFrame::write_rgba`].
 pub struct RemoteFrame<'a> {
 	pub user: u64,
 	pub width: u32,
 	pub height: u32,
-	pub rgba: &'a [u8],
+	pub i420: &'a [u8],
+}
+
+impl RemoteFrame<'_> {
+	/// The plane bytes are present for the stated size.
+	pub fn is_complete(&self) -> bool {
+		self.i420.len() == platform::video::i420_len(self.width as usize, self.height as usize)
+	}
+
+	/// The Y, U and V planes; `None` when the bytes do not match the stated size.
+	pub fn planes(&self) -> Option<(&[u8], &[u8], &[u8])> {
+		if !self.is_complete() {
+			return None;
+		}
+		let luma = self.width as usize * self.height as usize;
+		let (cw, ch) = platform::video::chroma_size(self.width as usize, self.height as usize);
+		let (y, chroma) = self.i420.split_at(luma);
+		let (u, v) = chroma.split_at(cw * ch);
+		Some((y, u, v))
+	}
+
+	/// Convert to packed RGBA (limited-range BT.601, the WebRTC default) with integer math,
+	/// for consumers without a GPU path. `out` must hold `width × height × 4` bytes.
+	pub fn write_rgba(&self, out: &mut [u8]) -> bool {
+		let (width, height) = (self.width as usize, self.height as usize);
+		let Some((y, u, v)) = self.planes() else {
+			return false;
+		};
+		if out.len() != width * height * 4 {
+			return false;
+		}
+		let cw = width.div_ceil(2);
+		for row in 0..height {
+			let luma = &y[row * width..(row + 1) * width];
+			let us = &u[(row / 2) * cw..(row / 2 + 1) * cw];
+			let vs = &v[(row / 2) * cw..(row / 2 + 1) * cw];
+			let pixels = &mut out[row * width * 4..(row + 1) * width * 4];
+			for (x, (pixel, luma)) in pixels
+				.as_chunks_mut::<4>()
+				.0
+				.iter_mut()
+				.zip(luma)
+				.enumerate()
+			{
+				let (cu, cv) = (i32::from(us[x / 2]) - 128, i32::from(vs[x / 2]) - 128);
+				// 8.8 fixed point of 1.164, 1.596, 0.392, 0.813 and 2.017, rounded.
+				let c = 298 * (i32::from(*luma) - 16) + 128;
+				*pixel = [
+					((c + 409 * cv) >> 8).clamp(0, 255) as u8,
+					((c - 100 * cu - 208 * cv) >> 8).clamp(0, 255) as u8,
+					((c + 516 * cu) >> 8).clamp(0, 255) as u8,
+					255,
+				];
+			}
+		}
+		true
+	}
 }
 pub type VideoSink = Arc<dyn Fn(RemoteFrame<'_>) + Send + Sync>;
 
@@ -452,7 +510,7 @@ impl Receivers {
 	}
 }
 
-/// Decoder thread: cleartext access units in, bounded RGBA frames out through the sink.
+/// Decoder thread: cleartext access units in, bounded I420 pictures out through the sink.
 /// Dropping the returned sender ends the thread and releases every decoder.
 pub(crate) fn spawn_decoder(sink: VideoSink) -> Result<(DecoderQueue, Lost), &'static str> {
 	// Keep short bursts, but recover from a fresh keyframe instead of replaying stale video.
@@ -575,7 +633,7 @@ impl Backend {
 						user,
 						width: frame.width,
 						height: frame.height,
-						rgba: &frame.rgba,
+						i420: &frame.i420,
 					});
 				}
 			});
@@ -585,8 +643,8 @@ impl Backend {
 		}
 		openh264::decoder::Decoder::new().ok().map(Self::Software)
 	}
-	/// Feed one access unit. Software pictures are returned; hardware ones were already
-	/// delivered to the sink. `scratch` is reused so no frame-sized buffer is zeroed per frame.
+	/// Feed one access unit. Software pictures are returned (as I420 in `scratch`); hardware
+	/// ones were already delivered to the sink. `scratch` is reused across frames.
 	fn decode(&mut self, data: &[u8], scratch: &mut Vec<u8>) -> Result<Option<(u32, u32)>, ()> {
 		match self {
 			Self::Hardware(decoder) => decoder.decode(data).map(|()| None).map_err(|_| ()),
@@ -596,15 +654,25 @@ impl Backend {
 					Ok(None) => return Ok(None),
 					Err(_) => return Err(()),
 				};
-				let (width, height) = openh264::formats::YUVSource::dimensions(&decoded);
-				let (width, height) = bounded(width, height)?;
-				let bytes = width as usize * height as usize * 4;
-				// Shared across participants: retain initialized bytes when resolutions alternate.
-				if scratch.len() < bytes {
-					scratch.reserve_exact(bytes - scratch.len());
-					scratch.resize(bytes, 0);
+				use openh264::formats::YUVSource;
+				let (w, h) = decoded.dimensions();
+				let (width, height) = bounded(w, h)?;
+				let (w, h) = (width as usize, height as usize);
+				let (cw, ch) = platform::video::chroma_size(w, h);
+				let (y_stride, u_stride, v_stride) = decoded.strides();
+				// Repack the decoder's padded planes into tight I420; colour stays with the
+				// consumer. The buffer is shared across participants and only ever grows.
+				scratch.clear();
+				for (plane, stride, pw, ph) in [
+					(decoded.y(), y_stride, w, h),
+					(decoded.u(), u_stride, cw, ch),
+					(decoded.v(), v_stride, cw, ch),
+				] {
+					for row in 0..ph {
+						let start = row * stride;
+						scratch.extend_from_slice(plane.get(start..start + pw).ok_or(())?);
+					}
 				}
-				decoded.write_rgba8(&mut scratch[..bytes]);
 				Ok(Some((width, height)))
 			}
 		}
@@ -731,7 +799,7 @@ fn decode_loop(
 			user: frame.user,
 			width,
 			height,
-			rgba: &scratch[..width as usize * height as usize * 4],
+			i420: &scratch[..platform::video::i420_len(width as usize, height as usize)],
 		});
 	}
 	// Hardware pictures still in flight must land before the sink goes away.
@@ -772,6 +840,30 @@ fn bounded(width: usize, height: usize) -> Result<(u32, u32), ()> {
 #[cfg(test)]
 mod tests {
 	use super::*;
+
+	#[test]
+	fn i420_frames_split_and_convert_to_rgba() {
+		// 3×1 picture: odd width, so chroma is 2×1.
+		let i420 = [16, 235, 126, 128, 128, 128, 128];
+		let frame = RemoteFrame {
+			user: 1,
+			width: 3,
+			height: 1,
+			i420: &i420,
+		};
+		let (y, u, v) = frame.planes().unwrap();
+		assert_eq!((y.len(), u.len(), v.len()), (3, 2, 2));
+		let mut rgba = [0; 12];
+		assert!(frame.write_rgba(&mut rgba));
+		// Limited-range black, white and mid grey.
+		assert_eq!(rgba, [0, 0, 0, 255, 255, 255, 255, 255, 128, 128, 128, 255]);
+		assert!(!frame.write_rgba(&mut [0; 8]), "wrong output size");
+		let short = RemoteFrame {
+			i420: &i420[..6],
+			..frame
+		};
+		assert!(short.planes().is_none());
+	}
 
 	fn decoder_cleanup_queue(capacity: usize) -> (DecoderQueue, Receiver<Decode>) {
 		let (send, receive) = sync_channel(capacity);

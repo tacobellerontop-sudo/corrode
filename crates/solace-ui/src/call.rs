@@ -987,13 +987,13 @@ fn stream_tile(
 			}
 		}
 	} else if watching == Some(user) {
-		if let Some(texture) = &solace.media.voice_stream_view {
+		if let Some(view) = solace.media.voice_stream_view {
 			// Letterbox the shared screen: never crop someone's screen.
-			let size = texture.size_vec2();
+			let size = view.size;
 			let scale = (rect.width() / size.x).min(rect.height() / size.y);
 			let fitted = Rect::from_center_size(center, size * scale);
 			ui.painter().image(
-				texture.id(),
+				view.texture,
 				fitted,
 				Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)),
 				Color32::WHITE,

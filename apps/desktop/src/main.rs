@@ -31,6 +31,7 @@ mod showcase;
 mod spotify;
 #[allow(dead_code)]
 mod uploads;
+mod video_gpu;
 mod voice;
 mod watch;
 
@@ -272,6 +273,11 @@ impl Desktop {
 			let wake = cc.egui_ctx.clone();
 			platform::notifications::Notifications::new(move || wake.request_repaint())
 		};
+		// Watched streams are colour-converted on the GPU that draws the window.
+		let mut voice = voice::Voice::default();
+		if let Some(render) = cc.wgpu_render_state.clone() {
+			voice.use_gpu(render);
+		}
 		Ok(Self {
 			runtime,
 			window,
@@ -289,7 +295,7 @@ impl Desktop {
 			avatar_start_failed: false,
 			avatar_clear_account: None,
 			avatar_cleanup: None,
-			voice: voice::Voice::default(),
+			voice,
 			uploads: uploads::Uploads::default(),
 			downloads: downloads::Downloads::default(),
 			audio: audio::Audio::default(),

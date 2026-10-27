@@ -5263,6 +5263,7 @@ dependencies = [
  "egui",
  "image",
  "model",
+ "naga",
  "ruzstd",
  "test-support",
  "time",

@@ -1,7 +1,8 @@
 //! Windows live H.264 decoding through the Media Foundation H.264 decoder transform. A DXGI
 //! device manager enables DXVA hardware decoding when the GPU offers it; without one the
 //! decoder runs in software. Output samples are read back through Media Foundation, so both
-//! paths deliver the same NV12 pictures, converted here to RGBA.
+//! paths deliver the same NV12 pictures, repacked here (cropped, chroma de-interleaved) into
+//! tight I420 planes: a byte copy, with colour conversion left to the GPU.
 #![allow(unsafe_code)]
 
 use super::{
@@ -257,7 +258,7 @@ impl H264Decoder {
 				return Ok(());
 			};
 			let bytes = sample_bytes(&sample)?;
-			(self.sink)(nv12_to_rgba(&bytes, format)?);
+			(self.sink)(nv12_to_i420(&bytes, format)?);
 		}
 	}
 }
@@ -316,8 +317,9 @@ fn sample_bytes(sample: &IMFSample) -> Result<Vec<u8>, &'static str> {
 	}
 }
 
-/// Convert one NV12 picture (limited-range BT.601, the WebRTC default) to packed RGBA.
-fn nv12_to_rgba(bytes: &[u8], format: OutputFormat) -> Result<Frame, &'static str> {
+/// Crop one NV12 picture into tightly packed I420: luma rows are copied as they are and the
+/// interleaved chroma is split into U and V planes. No colour math happens here.
+fn nv12_to_i420(bytes: &[u8], format: OutputFormat) -> Result<Frame, &'static str> {
 	let (stride, height) = (format.stride as usize, format.height as usize);
 	let (x0, y0, width, out_height) = (
 		format.crop.0 as usize,
@@ -333,32 +335,32 @@ fn nv12_to_rgba(bytes: &[u8], format: OutputFormat) -> Result<Frame, &'static st
 		return Err(INVALID);
 	}
 	let (luma, chroma) = bytes.split_at(luma_len);
-	let mut rgba = vec![0; width * out_height * 4];
-	for y in 0..out_height {
-		let luma_row = &luma[(y0 + y) * stride..];
-		let chroma_row = &chroma[((y0 + y) / 2) * stride..];
-		let out = &mut rgba[y * width * 4..(y + 1) * width * 4];
-		for (x, pixel) in out.as_chunks_mut::<4>().0.iter_mut().enumerate() {
-			let sx = x0 + x;
-			let yy = f32::from(luma_row[sx]) - 16.0;
-			let u = f32::from(chroma_row[(sx / 2) * 2]) - 128.0;
-			let v = f32::from(chroma_row[(sx / 2) * 2 + 1]) - 128.0;
-			let r = 1.164 * yy + 1.596 * v;
-			let g = 1.164 * yy - 0.392 * u - 0.813 * v;
-			let b = 1.164 * yy + 2.017 * u;
-			// Round to the nearest channel value: limited-range white is 254.916 here.
-			*pixel = [
-				r.round().clamp(0.0, 255.0) as u8,
-				g.round().clamp(0.0, 255.0) as u8,
-				b.round().clamp(0.0, 255.0) as u8,
-				255,
-			];
+	let (cw, ch) = super::chroma_size(width, out_height);
+	let mut i420 = vec![0; super::i420_len(width, out_height)];
+	let (y_out, planes) = i420.split_at_mut(width * out_height);
+	let (u_out, v_out) = planes.split_at_mut(cw * ch);
+	for (y, out) in y_out.chunks_exact_mut(width).enumerate() {
+		let row = (y0 + y) * stride + x0;
+		out.copy_from_slice(luma.get(row..row + width).ok_or(INVALID)?);
+	}
+	// Chroma covers 2×2 luma samples; an odd crop origin starts at the sample that covers it.
+	let (cx0, cy0) = (x0 / 2, y0 / 2);
+	for (y, (u_row, v_row)) in u_out
+		.chunks_exact_mut(cw)
+		.zip(v_out.chunks_exact_mut(cw))
+		.enumerate()
+	{
+		let start = (cy0 + y) * stride + cx0 * 2;
+		let pairs = chroma.get(start..start + cw * 2).ok_or(INVALID)?;
+		for ((u, v), [cb, cr]) in u_row.iter_mut().zip(v_row).zip(pairs.as_chunks::<2>().0) {
+			*u = *cb;
+			*v = *cr;
 		}
 	}
 	Ok(Frame {
 		width: format.crop.2,
 		height: format.crop.3,
-		rgba,
+		i420,
 	})
 }
 
@@ -366,37 +368,24 @@ fn nv12_to_rgba(bytes: &[u8], format: OutputFormat) -> Result<Frame, &'static st
 mod tests {
 	use super::*;
 	#[test]
-	fn nv12_conversion_crops_and_bounds() {
+	fn nv12_repacks_into_cropped_i420() {
+		// 4×2 luma with a stride of 4, then one row of interleaved UV for two columns.
 		let format = OutputFormat {
 			width: 4,
 			height: 2,
 			stride: 4,
-			crop: (0, 0, 2, 2),
+			crop: (2, 0, 2, 2),
 		};
-		let mut bytes = vec![235u8; 8];
-		bytes.extend([128u8; 4]);
-		let frame = nv12_to_rgba(&bytes, format).unwrap();
+		let bytes = [
+			10, 11, 12, 13, //
+			20, 21, 22, 23, //
+			100, 200, 101, 201,
+		];
+		let frame = nv12_to_i420(&bytes, format).unwrap();
 		assert_eq!((frame.width, frame.height), (2, 2));
-		assert!(
-			frame
-				.rgba
-				.as_chunks::<4>()
-				.0
-				.iter()
-				.all(|px| *px == [255, 255, 255, 255])
-		);
-		assert!(nv12_to_rgba(&bytes[..6], format).is_err());
-		for (luma, expected) in [(16, 0), (126, 128), (0, 0), (255, 255)] {
-			bytes[..8].fill(luma);
-			assert!(
-				nv12_to_rgba(&bytes, format)
-					.unwrap()
-					.rgba
-					.as_chunks::<4>()
-					.0
-					.iter()
-					.all(|px| *px == [expected, expected, expected, 255])
-			);
-		}
+		// Cropped luma, then the right-hand chroma sample split into U and V.
+		assert_eq!(frame.i420, [12, 13, 22, 23, 101, 201]);
+		assert_eq!(frame.i420.len(), super::super::i420_len(2, 2));
+		assert!(nv12_to_i420(&bytes[..9], format).is_err());
 	}
 }

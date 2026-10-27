@@ -41,7 +41,22 @@ struct Live {
 	context: Context,
 	task: JoinHandle<()>,
 	events: watch::Receiver<Option<Notice>>,
-	frames: Arc<Mutex<Option<egui::ColorImage>>>,
+	frames: Arc<Mutex<Pictures>>,
+}
+
+/// One decoded stream picture as tight I420 planes.
+struct Picture {
+	width: u32,
+	height: u32,
+	i420: Vec<u8>,
+}
+
+/// Hand-off between the decoder thread and the UI. Only the newest picture is kept, and the
+/// buffer the UI finished with is reused, so watching allocates nothing per frame.
+#[derive(Default)]
+struct Pictures {
+	latest: Option<Picture>,
+	spare: Vec<u8>,
 }
 
 #[derive(Default)]
@@ -54,6 +69,10 @@ pub(super) struct Watch {
 	status: &'static str,
 	/// Why the last view stopped; shown as a stage notice until the next request or hang-up.
 	notice: &'static str,
+	/// Converts pictures on the GPU; absent only if the renderer offered no wgpu state.
+	gpu: Option<crate::video_gpu::VideoGpu>,
+	/// CPU fallback texture when there is no GPU path.
+	fallback: Option<egui::TextureHandle>,
 }
 impl Watch {
 	pub fn stop(&mut self) {
@@ -62,6 +81,49 @@ impl Watch {
 		if let Some(live) = self.live.take() {
 			live.task.abort();
 		}
+		if let Some(gpu) = &mut self.gpu {
+			gpu.release();
+		}
+		self.fallback = None;
+	}
+	/// Convert watched pictures on the GPU from now on.
+	pub fn use_gpu(&mut self, state: eframe::egui_wgpu::RenderState) {
+		self.gpu = Some(crate::video_gpu::VideoGpu::new(state));
+	}
+	/// Show one picture: GPU conversion when available, else the CPU path.
+	fn present(&mut self, picture: &Picture, ui: &mut solace_ui::Media, ctx: &egui::Context) {
+		let size = egui::vec2(picture.width as f32, picture.height as f32);
+		if let Some(gpu) = &mut self.gpu
+			&& let Some(texture) = gpu.show(picture.width, picture.height, &picture.i420)
+		{
+			ui.voice_stream_view = Some(solace_ui::VideoView { texture, size });
+			return;
+		}
+		let frame = discord_voice::RemoteFrame {
+			user: 0,
+			width: picture.width,
+			height: picture.height,
+			i420: &picture.i420,
+		};
+		let mut rgba = vec![0; picture.width as usize * picture.height as usize * 4];
+		if !frame.write_rgba(&mut rgba) {
+			return;
+		}
+		let image = egui::ColorImage::from_rgba_premultiplied(
+			[picture.width as usize, picture.height as usize],
+			&rgba,
+		);
+		let texture = match &mut self.fallback {
+			Some(texture) => {
+				texture.set(image, egui::TextureOptions::LINEAR);
+				texture.id()
+			}
+			None => self
+				.fallback
+				.insert(ctx.load_texture("remote-stream", image, egui::TextureOptions::LINEAR))
+				.id(),
+		};
+		ui.voice_stream_view = Some(solace_ui::VideoView { texture, size });
 	}
 	fn context(&self) -> Option<Context> {
 		self.pending
@@ -252,18 +314,18 @@ impl Watch {
 			if live.task.is_finished() && self.ended.is_none() {
 				self.ended = Some("The stream connection ended");
 			}
-			let image = live.frames.try_lock().ok().and_then(|mut slot| slot.take());
-			if let Some(image) = image {
-				if let Some(texture) = &mut ui.voice_stream_view {
-					texture.set(image, egui::TextureOptions::LINEAR);
-				} else {
-					ui.voice_stream_view = Some(ctx.load_texture(
-						"remote-stream",
-						image,
-						egui::TextureOptions::LINEAR,
-					));
-				}
+			let frames = live.frames.clone();
+			let picture = frames
+				.try_lock()
+				.ok()
+				.and_then(|mut slot| slot.latest.take());
+			if let Some(picture) = picture {
+				self.present(&picture, ui, ctx);
 				self.status = "Watching the stream";
+				// Hand the buffer back to the decoder side for the next picture.
+				if let Ok(mut slot) = frames.lock() {
+					slot.spare = picture.i420;
+				}
 			}
 		} else {
 			ui.voice_stream_view = None;
@@ -295,22 +357,27 @@ impl Watch {
 			endpoint,
 			request: pending.context.stream_request,
 		};
-		let frames = Arc::new(Mutex::new(None));
+		let frames = Arc::new(Mutex::new(Pictures::default()));
 		let slot = frames.clone();
 		let wake = ctx.clone();
 		let streamer = pending.context.streamer.0;
 		let sink: discord_voice::VideoSink = Arc::new(move |frame: discord_voice::RemoteFrame| {
-			if frame.user != streamer
-				|| frame.rgba.len() != frame.width as usize * frame.height as usize * 4
-			{
+			if frame.user != streamer || !frame.is_complete() {
 				return;
 			}
-			let image = egui::ColorImage::from_rgba_unmultiplied(
-				[frame.width as usize, frame.height as usize],
-				frame.rgba,
-			);
 			if let Ok(mut slot) = slot.lock() {
-				*slot = Some(image);
+				// Reuse an unshown picture's buffer, else the one the UI handed back.
+				let mut i420 = match slot.latest.take() {
+					Some(stale) => stale.i420,
+					None => std::mem::take(&mut slot.spare),
+				};
+				i420.clear();
+				i420.extend_from_slice(frame.i420);
+				slot.latest = Some(Picture {
+					width: frame.width,
+					height: frame.height,
+					i420,
+				});
 			}
 			wake.request_repaint();
 		});

@@ -142,12 +142,13 @@ const MAX_REMOTE_VIDEO: usize = 16;
 type RemotePictures = Vec<(u64, Arc<egui::ColorImage>, bool)>;
 type CameraPicture = Option<(Arc<egui::ColorImage>, bool)>;
 
-#[allow(clippy::chunks_exact_to_as_chunks)] // Matches egui's faster profiled conversion loop.
+/// Keep the newest picture of one remote camera, converted to RGBA with integer math.
+/// Camera pictures are small; the watched screen share is converted on the GPU instead.
 fn store_remote_frame(
 	pictures: &mut RemotePictures,
 	frame: discord_voice::RemoteFrame<'_>,
 ) -> bool {
-	if frame.rgba.len() != frame.width as usize * frame.height as usize * 4 {
+	if !frame.is_complete() {
 		return false;
 	}
 	let entry = if let Some(index) = pictures.iter().position(|(user, _, _)| *user == frame.user) {
@@ -159,15 +160,23 @@ fn store_remote_frame(
 		return false;
 	};
 	let size = [frame.width as usize, frame.height as usize];
+	let mut rgba = vec![0; size[0] * size[1] * 4];
+	if !frame.write_rgba(&mut rgba) {
+		return false;
+	}
+	// Every pixel is opaque, so the premultiplied copy is exact and skips per-pixel math.
 	if let Some(image) = Arc::get_mut(&mut entry.1) {
 		image.size = size;
 		image.source_size = egui::vec2(frame.width as f32, frame.height as f32);
 		image.pixels.clear();
-		image.pixels.extend(frame.rgba.chunks_exact(4).map(|pixel| {
-			egui::Color32::from_rgba_unmultiplied(pixel[0], pixel[1], pixel[2], pixel[3])
-		}));
+		image.pixels.extend(
+			rgba.as_chunks::<4>()
+				.0
+				.iter()
+				.map(|[r, g, b, a]| egui::Color32::from_rgba_premultiplied(*r, *g, *b, *a)),
+		);
 	} else {
-		entry.1 = Arc::new(egui::ColorImage::from_rgba_unmultiplied(size, frame.rgba));
+		entry.1 = Arc::new(egui::ColorImage::from_rgba_premultiplied(size, &rgba));
 	}
 	entry.2 = true;
 	true
@@ -226,6 +235,10 @@ pub struct Voice {
 	camera_scan: Option<mpsc::Receiver<Result<discord_voice::camera::DeviceList, &'static str>>>,
 }
 impl Voice {
+	/// Convert watched streams on the GPU through the window's renderer.
+	pub fn use_gpu(&mut self, state: eframe::egui_wgpu::RenderState) {
+		self.watch.use_gpu(state);
+	}
 	pub fn stop(&mut self) {
 		self.camera_test = None;
 		self.mic_preview = None;
@@ -1344,14 +1357,16 @@ mod tests {
 	#[test]
 	fn optimization_remote_video_reuses_the_latest_frame_buffer() {
 		let mut pictures = Vec::new();
-		let rgba = [1, 2, 3, 255, 4, 5, 6, 255];
+		// 2×1 I420: two luma samples, one U and one V.
+		let i420 = [16, 235, 128, 128];
+		let small = [126, 128, 128];
 		assert!(store_remote_frame(
 			&mut pictures,
 			discord_voice::RemoteFrame {
 				user: 7,
 				width: 2,
 				height: 1,
-				rgba: &rgba,
+				i420: &i420,
 			},
 		));
 		let pixels = pictures[0].1.pixels.as_ptr();
@@ -1362,10 +1377,15 @@ mod tests {
 				user: 7,
 				width: 2,
 				height: 1,
-				rgba: &rgba,
+				i420: &i420,
 			},
 		));
 		assert_eq!(pictures[0].1.pixels.as_ptr(), pixels);
+		assert_eq!(
+			pictures[0].1.pixels,
+			[egui::Color32::BLACK, egui::Color32::WHITE],
+			"limited-range black and white"
+		);
 		assert!(pictures[0].2);
 		let upload = pictures[0].1.clone();
 		assert!(store_remote_frame(
@@ -1374,7 +1394,7 @@ mod tests {
 				user: 7,
 				width: 1,
 				height: 1,
-				rgba: &rgba[..4],
+				i420: &small,
 			},
 		));
 		assert!(!Arc::ptr_eq(&pictures[0].1, &upload));
