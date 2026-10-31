@@ -94,6 +94,13 @@ pub fn window_buttons(ui: &mut Ui, rect: Rect) -> f32 {
 
 /// The title bar across the top of `full`; returns the area below it.
 pub fn title_bar(ui: &mut Ui, full: Rect, title: &str) -> Rect {
+	// F11 works on every screen with a title bar, not only once signed in, so full
+	// screen can always be left the way it was entered.
+	if ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::F11)) {
+		let fullscreen = ui.input(|i| i.viewport().fullscreen.unwrap_or(false));
+		ui.ctx()
+			.send_viewport_cmd(egui::ViewportCommand::Fullscreen(!fullscreen));
+	}
 	// Full screen has no window to move or resize: give the content every pixel.
 	if ui.input(|i| i.viewport().fullscreen.unwrap_or(false)) {
 		return full;

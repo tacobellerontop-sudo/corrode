@@ -408,6 +408,10 @@ impl Desktop {
 		}
 		self.solace.clear_session();
 		self.solace.media.reset();
+		// Sign-in screens keep the window's own edges: full screen ends with the session.
+		if ctx.input(|i| i.viewport().fullscreen.unwrap_or(false)) {
+			ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(false));
+		}
 		if intent.forgets() {
 			self.solace
 				.accounts
