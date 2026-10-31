@@ -25,12 +25,24 @@ window and no stock widget look.
   with mute, deafen, device selection and push-to-talk.
 - **Context column** — who's in the voice room, members with presence, community info and
   your profile at a glance.
+- **Finding your way** — a Ctrl+K quick switcher, message search (Ctrl+F, with `from:`,
+  `has:` and `pinned:` filters), pinned messages (Ctrl+P), and jumping to the message a
+  reply points at.
+- **People** — profile cards from any name or avatar, friend requests in Activity, and
+  right-click menus to pin, copy links, mute or close conversations and leave communities.
 - **Local-first** — no Solace server. Messages, drafts and images live in bounded local
   caches; your login sits in the OS credential store.
 
 ## Getting started
 
 Solace targets **Windows** (WebView2 sign-in, Credential Manager, toast notifications).
+
+**Install:** every CI build of the Windows workflow publishes a `solace-windows-installer`
+artifact containing `solace-<version>-setup.exe`, a per-user installer (no admin rights) with
+a Start Menu entry and an uninstaller in Installed Apps. Pushing a `v*` tag also attaches it
+to a GitHub release.
+
+**Build from source:**
 
 ```powershell
 cargo run --locked --release -p solace

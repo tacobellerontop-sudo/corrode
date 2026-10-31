@@ -885,6 +885,41 @@ impl Desktop {
 				channel,
 				id: message,
 			},
+			Command::Search {
+				channel,
+				query,
+				request,
+				..
+			} => Event::Search {
+				channel,
+				request,
+				result: Ok(client_core::search::Outcome::Page(showcase::search_page(
+					&self.state,
+					Some(&query),
+				))),
+			},
+			Command::Pins {
+				channel, request, ..
+			} => Event::Search {
+				channel,
+				request,
+				result: Ok(client_core::search::Outcome::Pins(showcase::search_page(
+					&self.state,
+					None,
+				))),
+			},
+			Command::Pin {
+				request,
+				channel,
+				message,
+				pinned,
+			} => Event::Pinned {
+				request,
+				channel,
+				message,
+				pinned,
+				result: Ok(()),
+			},
 			Command::MarkRead {
 				channel,
 				message,

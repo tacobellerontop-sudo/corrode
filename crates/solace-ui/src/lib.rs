@@ -20,10 +20,14 @@ pub mod chrome;
 mod composer;
 mod conversation;
 mod dashboard;
+mod finder;
+mod menus;
 mod overlays;
+mod people;
 mod rail;
 mod sidebar;
 pub mod signin;
+mod switcher;
 mod thread;
 mod toasts;
 
@@ -158,6 +162,20 @@ pub struct Solace {
 	pub(crate) call: call::CallView,
 	/// Focus mode: the conversation fills the window; rail, sidebar and details hide.
 	pub(crate) focus: bool,
+	/// The search or pinned-messages panel over the conversation.
+	pub(crate) finder: Option<finder::Finder>,
+	/// Where the open profile card (`State::profile`) is anchored.
+	pub(crate) profile_at: Option<egui::Pos2>,
+	/// The Ctrl+K quick switcher: query and highlighted row.
+	pub(crate) switcher: Option<(String, usize)>,
+	/// A message jumped to (search hit, pin, reply) glows briefly: id and when it started.
+	pub(crate) highlight: Option<(Id, f64)>,
+	/// The add-friend dialog's username field.
+	pub(crate) add_friend: Option<String>,
+	/// An action that needs a second click before it is sent.
+	pub(crate) confirm: Option<menus::Confirm>,
+	/// The message whose "More" menu is open from its hover bar.
+	pub(crate) message_menu: Option<Id>,
 }
 
 impl Default for Solace {
@@ -198,6 +216,13 @@ impl Default for Solace {
 			draft_dirty: None,
 			call: Default::default(),
 			focus: false,
+			finder: None,
+			profile_at: None,
+			switcher: None,
+			highlight: None,
+			add_friend: None,
+			confirm: None,
+			message_menu: None,
 		}
 	}
 }
@@ -238,6 +263,34 @@ impl Solace {
 	/// Show the thread panel for a message (or close it with `None`).
 	pub fn open_thread(&mut self, message: Option<Id>) {
 		self.thread = message;
+	}
+
+	/// Open the search (`false`) or pinned-messages (`true`) panel for the open conversation.
+	pub fn open_finder(&mut self, pins: bool, query: &str) {
+		let mut finder = if pins {
+			finder::Finder::pins()
+		} else {
+			finder::Finder::search()
+		};
+		finder.query = query.to_owned();
+		self.finder = Some(finder);
+	}
+
+	/// Open the Ctrl+K quick switcher with a query typed.
+	pub fn open_switcher(&mut self, query: &str) {
+		self.switcher = Some((query.to_owned(), 0));
+	}
+
+	/// Show a person's profile card anchored at a screen position.
+	pub fn open_profile(&mut self, state: &mut State, user: Id, at: egui::Pos2) -> Vec<Command> {
+		let mut commands = Vec::new();
+		people::open(self, state, &mut commands, user, at);
+		commands
+	}
+
+	/// Show one of the rail's panes (Home, Direct, Explore, Activity).
+	pub fn open_pane(&mut self, pane: Pane) {
+		self.pane = pane;
 	}
 
 	pub fn is_editing(&self) -> bool {
@@ -325,7 +378,13 @@ impl Solace {
 		if self.thread.is_some() {
 			thread::show(self, ui, main, state, &mut commands);
 		}
+		if self.finder.is_some() {
+			finder::show(self, ui, main, state, &mut commands);
+		}
 		overlays::show(self, ui, state, &mut commands);
+		people::show(self, ui, state, &mut commands);
+		menus::show_confirm(self, ui, state, &mut commands);
+		switcher::show(self, ui, state, &mut commands);
 		self.toasts.show(ui.ctx());
 		self.sync_draft(state);
 		if self.draft_dirty.is_some() {
@@ -350,14 +409,29 @@ impl Solace {
 		if toggle && state.selected.is_some() {
 			self.set_focus(!self.focus);
 		}
-		// Search lives in the sidebar: Ctrl+K brings it back to type into.
-		if (self.focus || self.call.full)
-			&& ctx.input(|i| i.modifiers.command && i.key_pressed(egui::Key::K))
-		{
-			self.focus = false;
-			self.call.leave_full(ctx);
+		// Ctrl+K opens the quick switcher over whatever is showing, focus mode included.
+		if ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::K)) {
+			self.switcher = match self.switcher {
+				Some(_) => None,
+				None => Some((String::new(), 0)),
+			};
+		}
+		// Ctrl+F searches the open conversation; Ctrl+P lists its pinned messages.
+		if state.selected.is_some() && self.settings.is_none() && self.switcher.is_none() {
+			if ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::F)) {
+				self.finder = Some(finder::Finder::search());
+			}
+			if ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::P)) {
+				self.finder = Some(finder::Finder::pins());
+			}
 		}
 		let overlay = self.settings.is_some()
+			|| self.switcher.is_some()
+			|| self.finder.is_some()
+			|| self.profile_at.is_some()
+			|| self.add_friend.is_some()
+			|| self.confirm.is_some()
+			|| self.message_menu.is_some()
 			|| self.picker.is_some()
 			|| self.link.is_some()
 			|| self.join.is_some()
@@ -426,6 +500,10 @@ impl Solace {
 	}
 
 	fn on_navigate(&mut self, state: &State) {
+		// Panels belong to the conversation they were opened in (the first frame is not a move).
+		if self.scroll.channel.is_some() {
+			self.finder = None;
+		}
 		self.scroll = ScrollMemo {
 			channel: state.selected,
 			jump_to_bottom: true,
@@ -442,6 +520,7 @@ impl Solace {
 		self.editing = None;
 		self.picker = None;
 		self.more_menu = false;
+		self.message_menu = None;
 		self.heights.clear();
 		self.revealed.clear();
 		// Home has no sidebar, so opening a conversation moves to the pane that lists it.
