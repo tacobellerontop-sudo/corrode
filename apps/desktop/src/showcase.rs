@@ -603,3 +603,35 @@ fn dusk(width: usize, height: usize) -> ColorImage {
 	}
 	image
 }
+
+/// Offline answer to a search (`Some(query)`) or a pinned-messages request (`None`), drawn
+/// from the loaded window of the open conversation. Messages with pictures stand in for pins.
+#[allow(dead_code)]
+pub fn search_page(state: &State, query: Option<&str>) -> model::SearchPage {
+	let needle = query.map(|q| q.trim().to_lowercase());
+	let mut hits: Vec<model::SearchHit> = state
+		.timeline
+		.display_iter()
+		.filter(|m| !m.is_system())
+		.filter(|m| match &needle {
+			Some(needle) => m.content.to_lowercase().contains(needle.as_str()),
+			None => !m.attachments.is_empty() || m.reply_to.is_none() && m.content.len() > 60,
+		})
+		.map(|m| model::SearchHit {
+			id: m.id,
+			channel: m.channel,
+			author: m.author.clone(),
+			excerpt: m.content.clone(),
+			attachments: m.attachments.clone(),
+			embeds: Vec::new(),
+		})
+		.collect();
+	hits.sort_by_key(|hit| std::cmp::Reverse(hit.id));
+	hits.truncate(model::SEARCH_PAGE_SIZE);
+	model::SearchPage {
+		total: hits.len() as u64,
+		hits,
+		partial: false,
+		pin_cursor: None,
+	}
+}

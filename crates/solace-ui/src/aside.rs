@@ -513,13 +513,13 @@ fn members(
 			theme::sans(11.5),
 			color,
 		);
-		if response.clicked()
-			&& state.user.as_ref().is_none_or(|own| own.id != user.id)
-			&& let Some(command) = state.open_friend_dm(user.id)
-		{
-			commands.push(command);
+		crate::menus::person(solace, state, commands, &response, user.id);
+		if response.clicked() {
+			crate::people::open(solace, state, commands, user.id, rect.left_top());
 		}
-		response.on_hover_text(format!("Message {}", user.name));
+		response
+			.on_hover_cursor(egui::CursorIcon::PointingHand)
+			.on_hover_text(format!("View {}'s profile", user.name));
 	}
 }
 

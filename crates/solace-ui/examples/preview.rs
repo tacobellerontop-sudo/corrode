@@ -59,6 +59,11 @@ impl eframe::App for Preview {
 			}
 			let _ = self.solace.show(ui, &mut self.state);
 			let _ = self.solace.take_requests();
+			// Answer search and pins requests the way the offline showcase does.
+			if let Some(view) = self.state.search.as_ref().filter(|v| v.loading) {
+				let query = (!view.pins).then(|| view.query.clone());
+				fill_results(&mut self.state, query.as_deref());
+			}
 		}
 		self.frames += 1;
 		// Capture once entrance animations have settled.
@@ -89,6 +94,28 @@ impl eframe::App for Preview {
 		}
 		ctx.request_repaint();
 	}
+}
+
+fn arg(args: &[String], name: &str) -> Option<String> {
+	args.iter()
+		.position(|a| a == name)
+		.map(|i| args.get(i + 1).cloned().unwrap_or_default())
+}
+
+/// Answer the open search or pins request the way the offline showcase does.
+fn fill_results(state: &mut client_core::State, query: Option<&str>) {
+	let page = showcase::search_page(state, query);
+	state.search = Some(client_core::search::SearchView {
+		pins: query.is_none(),
+		channel: state.selected.unwrap(),
+		query: query.unwrap_or_default().to_owned(),
+		before: None,
+		pin_before: None,
+		request: state.search_request,
+		loading: false,
+		error: None,
+		page: Some(page),
+	});
 }
 
 fn main() -> eframe::Result {
@@ -157,6 +184,30 @@ fn main() -> eframe::Result {
 			}
 			if args.iter().any(|a| a == "--settings-voice") {
 				solace.open_settings(solace_ui::SettingsPage::Voice);
+			}
+			if args.iter().any(|a| a == "--pins") {
+				solace.open_thread(None);
+				solace.open_finder(true, "");
+				fill_results(&mut state, None);
+			}
+			if let Some(query) = arg(&args, "--search") {
+				solace.open_thread(None);
+				solace.open_finder(false, &query);
+				fill_results(&mut state, Some(&query));
+			}
+			if let Some(query) = arg(&args, "--switcher") {
+				solace.open_switcher(&query);
+			}
+			if args.iter().any(|a| a == "--profile") {
+				solace.open_thread(None);
+				let author = state.timeline.display_iter().nth(1).map(|m| m.author.id);
+				if let Some(author) = author {
+					let _ = solace.open_profile(&mut state, author, egui::pos2(620.0, 360.0));
+				}
+			}
+			if args.iter().any(|a| a == "--activity") {
+				solace.open_thread(None);
+				solace.open_pane(solace_ui::Pane::Activity);
 			}
 			if args.iter().any(|a| a == "--settings") {
 				solace.open_settings(solace_ui::SettingsPage::Appearance);

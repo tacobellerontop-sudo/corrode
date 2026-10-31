@@ -4,7 +4,7 @@ use crate::{
 	Pane, Solace, clock,
 	icons::{self, Icon},
 	images, nav,
-	paint::{self, AvatarShape},
+	paint::{self, AvatarShape, ButtonKind},
 	theme::{self, Palette, mix},
 };
 use client_core::{Command, State};
@@ -86,29 +86,9 @@ fn search_field(solace: &mut Solace, ui: &mut Ui, rect: Rect, p: &Palette) {
 		16.0,
 		p.muted,
 	);
-	let shortcut = if ui.ctx().os() == egui::os::OperatingSystem::Mac {
-		"⌘ K"
-	} else {
-		"Ctrl K"
-	};
-	let hint = ui
-		.painter()
-		.layout_no_wrap(shortcut.into(), theme::sans(11.0), p.muted);
-	let chip = Rect::from_min_size(
-		rect.right_center() - vec2(hint.size().x + 22.0, 10.0),
-		vec2(hint.size().x + 12.0, 20.0),
-	);
-	if solace.search.is_empty() {
-		ui.painter().rect_filled(chip, 6, p.surface_alt);
-		ui.painter()
-			.galley(chip.center() - hint.size() / 2.0, hint, p.muted);
-	}
-	if ui.input(|i| i.modifiers.command && i.key_pressed(Key::K)) {
-		ui.ctx().memory_mut(|m| m.request_focus(id));
-	}
 	let edit = Rect::from_min_max(
 		rect.min + vec2(36.0, 0.0),
-		pos2(chip.left() - 6.0, rect.bottom()),
+		pos2(rect.right() - 12.0, rect.bottom()),
 	);
 	let response = ui.put(
 		edit,
@@ -118,7 +98,7 @@ fn search_field(solace: &mut Solace, ui: &mut Ui, rect: Rect, p: &Palette) {
 			.font(theme::sans(13.5))
 			.text_color(p.text)
 			.hint_text(
-				egui::RichText::new("Search anything...")
+				egui::RichText::new("Filter this list...")
 					.color(p.muted)
 					.font(theme::sans(13.5)),
 			)
@@ -214,6 +194,7 @@ fn communities(
 	for guild in guilds {
 		let selected = selected_guild == Some(guild.id);
 		let (rect, response) = row(ui, 57.0, selected);
+		crate::menus::community(solace, state, commands, &response, guild.id);
 		let icon = Rect::from_min_size(rect.left_center() + vec2(8.0, -19.0), vec2(38.0, 38.0));
 		let texture = solace.images.get_opt(guild.icon_key().as_deref());
 		paint::avatar(
@@ -549,6 +530,7 @@ fn direct(
 	for channel in channels {
 		let selected = state.selected == Some(channel.id);
 		let (rect, response) = row(ui, 54.0, selected);
+		crate::menus::conversation(solace, state, commands, &response, &channel);
 		let avatar = Rect::from_min_size(rect.left_center() + vec2(8.0, -18.0), vec2(36.0, 36.0));
 		conversation_avatar(solace, ui.painter(), avatar, state, &channel, &p);
 		let peer = (channel.kind == 1)
@@ -651,6 +633,7 @@ fn activity(
 	query: &str,
 ) {
 	let p = theme::palette(ui.ctx());
+	friend_requests(solace, ui, state, commands, query);
 	section_header(ui, "Activity", None);
 	let unread: Vec<Channel> = state
 		.channels
@@ -722,6 +705,117 @@ fn activity(
 		}
 	}
 	let _ = mix;
+}
+
+/// Incoming and outgoing friend requests, with accept, decline and cancel.
+fn friend_requests(
+	solace: &mut Solace,
+	ui: &mut Ui,
+	state: &mut State,
+	commands: &mut Vec<Command>,
+	query: &str,
+) {
+	let p = theme::palette(ui.ctx());
+	if section_header(ui, "Friend requests", Some("Add a friend")).is_some_and(|r| r.clicked()) {
+		solace.add_friend = Some(String::new());
+	}
+	let mut requests: Vec<(model::User, String, bool)> = state
+		.pending_friends()
+		.filter(|(user, name, _)| {
+			matches(query, name) || matches(query, state.user_display_name(user))
+		})
+		.cloned()
+		.collect();
+	// Incoming first: they are the ones waiting on you.
+	requests.sort_by_key(|(_, name, incoming)| (!*incoming, name.clone()));
+	if requests.is_empty() {
+		empty(
+			ui,
+			if state.friend_requests_known() || state.demo {
+				"No pending requests"
+			} else {
+				"Friend requests load once connected"
+			},
+		);
+		ui.add_space(10.0);
+		return;
+	}
+	let busy = state.user_action_pending();
+	for (user, name, incoming) in requests {
+		let (rect, response) = row(ui, 54.0, false);
+		crate::menus::person(solace, state, commands, &response, user.id);
+		let avatar = Rect::from_min_size(rect.left_center() + vec2(8.0, -17.0), vec2(34.0, 34.0));
+		let texture = solace.images.get(&user.avatar_key());
+		paint::avatar(
+			ui.painter(),
+			avatar,
+			AvatarShape::Circle,
+			texture,
+			&user.name,
+			user.id.0,
+			&p,
+		);
+		let left = avatar.right() + 12.0;
+		let buttons = if incoming { 2.0 } else { 1.0 };
+		let max = rect.right() - left - buttons * 34.0 - 12.0;
+		paint::text_left(
+			ui.painter(),
+			pos2(left, rect.center().y - 8.0),
+			state.user_display_name(&user),
+			theme::semibold(13.5),
+			p.text,
+			max,
+		);
+		paint::text_left(
+			ui.painter(),
+			pos2(left, rect.center().y + 10.0),
+			if incoming {
+				"Wants to be friends"
+			} else {
+				"Request sent"
+			},
+			theme::sans(11.5),
+			p.muted,
+			max,
+		);
+		let mut x = rect.right() - 22.0;
+		let decline = paint::icon_button(
+			ui,
+			ui.scope_id().with(("friend-decline", user.id)),
+			Rect::from_center_size(pos2(x, rect.center().y), vec2(30.0, 30.0)),
+			Icon::Close,
+			ButtonKind::Soft,
+			false,
+			if incoming {
+				"Decline"
+			} else {
+				"Cancel request"
+			},
+		);
+		if decline.clicked() && !busy {
+			commands.extend(state.resolve_friend_request(user.id, false));
+		}
+		if incoming {
+			x -= 36.0;
+			let accept = paint::icon_button(
+				ui,
+				ui.scope_id().with(("friend-accept", user.id)),
+				Rect::from_center_size(pos2(x, rect.center().y), vec2(30.0, 30.0)),
+				Icon::Check,
+				ButtonKind::Primary,
+				false,
+				"Accept",
+			);
+			if accept.clicked() && !busy {
+				commands.extend(state.resolve_friend_request(user.id, true));
+			}
+		}
+		if response.clicked() {
+			crate::people::open(solace, state, commands, user.id, rect.right_top());
+		}
+		let _ = &name;
+	}
+	ui.add_space(10.0);
 }
 
 fn empty(ui: &mut Ui, text: &str) {

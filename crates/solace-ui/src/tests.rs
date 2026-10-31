@@ -261,21 +261,20 @@ fn focus_mode_toggles_with_the_shortcut_and_leaves_on_escape() {
 	let mut solace = Solace::default();
 	let mut state = test_support::demo_state();
 	let _ = state.select(nav::landing(&state, state.guilds[0].id).unwrap());
-	let run =
-		|events: Vec<egui::Event>, solace: &mut Solace, state: &mut client_core::State| {
-			let input = egui::RawInput {
-				screen_rect: Some(Rect::from_min_size(
-					egui::Pos2::ZERO,
-					egui::vec2(1400.0, 900.0),
-				)),
-				events,
-				..Default::default()
-			};
-			let mut output = ctx.run_ui(input, |ui| {
-				let _ = solace.show(ui, state);
-			});
-			output.textures_delta.clear();
+	let run = |events: Vec<egui::Event>, solace: &mut Solace, state: &mut client_core::State| {
+		let input = egui::RawInput {
+			screen_rect: Some(Rect::from_min_size(
+				egui::Pos2::ZERO,
+				egui::vec2(1400.0, 900.0),
+			)),
+			events,
+			..Default::default()
 		};
+		let mut output = ctx.run_ui(input, |ui| {
+			let _ = solace.show(ui, state);
+		});
+		output.textures_delta.clear();
+	};
 	let key = |key, modifiers| egui::Event::Key {
 		key,
 		physical_key: None,
@@ -311,25 +310,24 @@ fn focus_and_full_window_calls_end_when_their_conversation_or_call_does() {
 	install(&ctx).unwrap();
 	let mut solace = Solace::default();
 	let mut state = test_support::demo_state();
-	let run =
-		|events: Vec<egui::Event>, solace: &mut Solace, state: &mut client_core::State| {
-			let input = egui::RawInput {
-				screen_rect: Some(Rect::from_min_size(
-					egui::Pos2::ZERO,
-					egui::vec2(1400.0, 900.0),
-				)),
-				events,
-				..Default::default()
-			};
-			let mut output = ctx.run_ui(input, |ui| {
-				let _ = solace.show(ui, state);
-			});
-			output.textures_delta.clear();
+	let run = |events: Vec<egui::Event>, solace: &mut Solace, state: &mut client_core::State| {
+		let input = egui::RawInput {
+			screen_rect: Some(Rect::from_min_size(
+				egui::Pos2::ZERO,
+				egui::vec2(1400.0, 900.0),
+			)),
+			events,
+			..Default::default()
 		};
+		let mut output = ctx.run_ui(input, |ui| {
+			let _ = solace.show(ui, state);
+		});
+		output.textures_delta.clear();
+	};
 	let dm = nav::direct(&state)[0].clone();
 	let _ = state.select(dm.id);
 
-	// Ctrl+K leaves focus mode, since search lives in the sidebar it hides.
+	// Ctrl+K opens the quick switcher over focus mode instead of leaving it.
 	solace.set_focus(true);
 	run(
 		vec![
@@ -345,7 +343,10 @@ fn focus_and_full_window_calls_end_when_their_conversation_or_call_does() {
 		&mut solace,
 		&mut state,
 	);
-	assert!(!solace.focus, "Ctrl+K leaves focus mode to search");
+	assert!(solace.focus, "Ctrl+K keeps focus mode");
+	assert!(solace.switcher.is_some(), "Ctrl+K opens the quick switcher");
+	solace.switcher = None;
+	solace.set_focus(false);
 
 	// Going Home ends focus, so the next conversation opens with its sidebars.
 	solace.set_focus(true);
@@ -391,4 +392,41 @@ fn focus_and_full_window_calls_end_when_their_conversation_or_call_does() {
 		!solace.call.full,
 		"the stage stops filling the window once the call ends"
 	);
+}
+
+#[test]
+fn a_jumped_to_message_scrolls_into_view_and_glows() {
+	let ctx = egui::Context::default();
+	install(&ctx).unwrap();
+	let mut solace = Solace::default();
+	let mut state = test_support::demo_state();
+	let _ = state.select(nav::landing(&state, state.guilds[0].id).unwrap());
+	let run = |solace: &mut Solace, state: &mut client_core::State| {
+		let input = egui::RawInput {
+			screen_rect: Some(Rect::from_min_size(
+				egui::Pos2::ZERO,
+				egui::vec2(1400.0, 900.0),
+			)),
+			..Default::default()
+		};
+		let mut output = ctx.run_ui(input, |ui| {
+			let _ = solace.show(ui, state);
+		});
+		output.textures_delta.clear();
+	};
+	run(&mut solace, &mut state);
+	let target = state
+		.timeline
+		.display_iter()
+		.next()
+		.map(|m| m.id)
+		.expect("the fixture conversation has messages");
+	state.search_target = Some(target);
+	state.restore_scroll = false;
+	run(&mut solace, &mut state);
+	assert_eq!(
+		state.search_target, None,
+		"the target is consumed once shown"
+	);
+	assert_eq!(solace.highlight.map(|(id, _)| id), Some(target));
 }

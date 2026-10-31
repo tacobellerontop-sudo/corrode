@@ -19,6 +19,7 @@ const GUTTER: f32 = 52.0;
 const GROUP_WINDOW_MINUTES: i64 = 7;
 const HERO_HEIGHT: f32 = 228.0;
 const MAX_TEXT_WIDTH: f32 = 760.0;
+const HIGHLIGHT_SECONDS: f32 = 2.4;
 
 pub fn show(solace: &mut Solace, ui: &mut Ui, state: &mut State, commands: &mut Vec<Command>) {
 	let p = theme::palette(ui.ctx());
@@ -292,9 +293,11 @@ fn more_menu(
 	{
 		items.push((Icon::Check, "Mark community as read", 1));
 	}
+	items.push((Icon::Search, "Search messages  (Ctrl+F)", 4));
+	items.push((Icon::Paperclip, "Pinned messages  (Ctrl+P)", 5));
 	items.push((Icon::Thread, "Jump to latest", 2));
 	items.push((Icon::Settings, "Settings", 3));
-	let width = 230.0;
+	let width = 250.0;
 	let height = items.len() as f32 * 38.0 + 12.0;
 	let a = crate::motion::appear(ui.ctx(), egui::Id::unique("more-menu-enter"), 0.16);
 	let rect = Rect::from_min_size(
@@ -352,6 +355,8 @@ fn more_menu(
 		Some(1) => commands.extend(channel.guild.and_then(|g| state.prepare_mark_guild_read(g))),
 		Some(2) => solace.scroll.jump_to_bottom = true,
 		Some(3) => solace.settings = Some(crate::SettingsPage::Appearance),
+		Some(4) => solace.finder = Some(crate::finder::Finder::search()),
+		Some(5) => solace.finder = Some(crate::finder::Finder::pins()),
 		_ => {}
 	}
 	if chosen.is_some() || clicked_outside || ui.input(|i| i.key_pressed(egui::Key::Escape)) {
@@ -456,7 +461,29 @@ fn timeline_view(
 		.id_salt(("timeline-scroll", channel.id))
 		.auto_shrink([false, false])
 		.stick_to_bottom(true);
-	if std::mem::take(&mut solace.scroll.jump_to_bottom) {
+	// A message jumped to (search hit, pin, reply) is brought into view and glows briefly.
+	// Reopening a conversation at a saved reading position keeps the usual jump to latest.
+	let mut target_offset = None;
+	if !state.history_pending
+		&& let Some(target) = state.search_target
+	{
+		if state.restore_scroll {
+			state.search_target = None;
+			state.restore_scroll = false;
+		} else if let Some(index) = rows
+			.iter()
+			.position(|row| matches!(row, Row::Message { id, .. } if *id == target))
+		{
+			let y: f32 = heights[..index].iter().sum();
+			target_offset = Some((y - rect.height() * 0.3).max(0.0));
+			state.search_target = None;
+			solace.highlight = Some((target, ui.input(|i| i.time)));
+		}
+	}
+	if let Some(offset) = target_offset {
+		solace.scroll.jump_to_bottom = false;
+		area = area.vertical_scroll_offset(offset);
+	} else if std::mem::take(&mut solace.scroll.jump_to_bottom) {
 		area = area.vertical_scroll_offset(total.max(0.0));
 	}
 	// Keep the reading position when an older page is prepended above it.
@@ -479,6 +506,23 @@ fn timeline_view(
 		for (row, height) in rows.iter().zip(&heights) {
 			let row_rect = Rect::from_min_size(origin + vec2(0.0, y), vec2(width, *height));
 			if y + height >= viewport.min.y - 200.0 && y <= viewport.max.y + 200.0 {
+				if let Row::Message { id, .. } = row
+					&& let Some((target, since)) = solace.highlight
+					&& target == *id
+				{
+					let age = (ui.input(|i| i.time) - since) as f32;
+					if age < HIGHLIGHT_SECONDS {
+						let fade = 1.0 - (age / HIGHLIGHT_SECONDS).powi(2);
+						ui.painter().rect_filled(
+							row_rect.expand2(vec2(8.0, 0.0)),
+							12,
+							p.accent_soft.gamma_multiply(fade),
+						);
+						ui.ctx().request_repaint();
+					} else {
+						solace.highlight = None;
+					}
+				}
 				// Messages that arrive while the conversation is open (and ones you send)
 				// rise into place; the history that was already here does not.
 				let entering = match row {
@@ -862,7 +906,7 @@ fn layout_message(
 
 	// Reply context line.
 	if let Some(target) = message.reply_to {
-		if let Some((ui, _, origin)) = paint_at.as_mut() {
+		if let Some((ui, deferred, origin)) = paint_at.as_mut() {
 			let line_y = origin.y + y + 9.0;
 			let start = pos2(origin.x + AVATAR / 2.0, line_y + 10.0);
 			ui.painter().add(egui::Shape::line(
@@ -896,7 +940,7 @@ fn layout_message(
 				);
 				x = r.right() + 6.0;
 			}
-			paint::text_left(
+			let shown = paint::text_left(
 				ui.painter(),
 				pos2(x, line_y),
 				&preview,
@@ -904,13 +948,28 @@ fn layout_message(
 				p.muted,
 				origin.x + content_left + content_w - x,
 			);
+			let line = Rect::from_min_max(
+				pos2(origin.x + content_left, line_y - 9.0),
+				pos2(shown.right(), line_y + 9.0),
+			);
+			let jump = ui
+				.interact(
+					line,
+					ui.scope_id().with(("reply-jump", message.id)),
+					Sense::click(),
+				)
+				.on_hover_cursor(egui::CursorIcon::PointingHand)
+				.on_hover_text("Jump to the original message");
+			if jump.clicked() {
+				deferred.push(Deferred::Jump(target));
+			}
 		}
 		y += 20.0;
 	}
 
 	let header_y = y;
 	if !continuation {
-		if let Some((ui, _, origin)) = paint_at.as_mut() {
+		if let Some((ui, deferred, origin)) = paint_at.as_mut() {
 			let avatar =
 				Rect::from_min_size(*origin + vec2(0.0, header_y + 2.0), vec2(AVATAR, AVATAR));
 			let texture = solace.images.get(&message.author.avatar_key());
@@ -943,6 +1002,21 @@ fn layout_message(
 				theme::semibold(14.0),
 				color,
 			);
+			for (part, target) in [("avatar", avatar), ("name", name_rect)] {
+				let response = ui
+					.interact(
+						target,
+						ui.scope_id().with(("author", part, message.id)),
+						Sense::click(),
+					)
+					.on_hover_cursor(egui::CursorIcon::PointingHand);
+				if response.clicked() {
+					deferred.push(Deferred::Profile(
+						message.author.id,
+						target.right_top() + vec2(8.0, 0.0),
+					));
+				}
+			}
 			let mut x = name_rect.right() + 10.0;
 			if let Some(tag) = message.author.account_label() {
 				let chip =
@@ -1416,15 +1490,28 @@ fn layout_message(
 pub(crate) enum Deferred {
 	React(Id, model::ReactionEmoji),
 	Edit(Id, Id, String),
+	/// Scroll to (loading if needed) the message a reply points at.
+	Jump(Id),
+	/// Open a user's profile card at a screen position.
+	Profile(Id, Pos2),
 }
 
 pub(crate) fn apply_deferred(
+	solace: &mut Solace,
 	state: &mut State,
 	commands: &mut Vec<Command>,
 	deferred: Vec<Deferred>,
 ) {
 	for action in deferred {
 		match action {
+			Deferred::Jump(target) => match state.open_reply_target(target) {
+				Some(command) => commands.push(command),
+				None if state.search_target == Some(target) => {}
+				None => solace
+					.toasts
+					.push(crate::Level::Info, "The original message can't be opened"),
+			},
+			Deferred::Profile(user, at) => crate::people::open(solace, state, commands, user, at),
 			Deferred::React(message, emoji) => {
 				commands.extend(state.prepare_reaction(message, emoji))
 			}
@@ -1750,7 +1837,15 @@ fn paint_row(
 		Row::Message { id, continuation } => {
 			let message = state.timeline.get_display(*id)?.clone();
 			let hover_rect = rect.expand2(vec2(8.0, 0.0));
-			let hovered = ui.rect_contains_pointer(hover_rect) && solace.picker.is_none();
+			let menu_open = solace.message_menu == Some(*id);
+			let hovered =
+				menu_open || ui.rect_contains_pointer(hover_rect) && solace.picker.is_none();
+			// Registered before the message's own links and images so those stay on top.
+			let row_response = ui.interact(
+				hover_rect,
+				ui.scope_id().with(("message-row", *id)),
+				Sense::click(),
+			);
 			if hovered {
 				ui.painter()
 					.rect_filled(hover_rect, 12, p.hover.gamma_multiply(0.55));
@@ -1767,7 +1862,10 @@ fn paint_row(
 				replies.get(id).copied().unwrap_or(0),
 				Some((ui, &mut deferred, rect.min)),
 			);
-			apply_deferred(state, commands, deferred);
+			apply_deferred(solace, state, commands, deferred);
+			if !message.is_system() {
+				crate::menus::message(solace, state, commands, &row_response, &message);
+			}
 			if hovered && !message.is_system() && solace.editing.is_none() {
 				actions(solace, ui, state, commands, &message, rect);
 			}
@@ -1871,6 +1969,7 @@ fn actions(
 	if state.can_delete(message.channel, message.id) {
 		buttons.push((Icon::Trash, "Delete", 4));
 	}
+	buttons.push((Icon::More, "More", 5));
 	let quick: &[&str] = if can_react { &["❤️", "👍"] } else { &[] };
 	let w = (buttons.len() + quick.len()) as f32 * 32.0 + 10.0;
 	let bar = Rect::from_min_size(
@@ -1933,8 +2032,18 @@ fn actions(
 				}
 				2 => solace.thread = Some(message.id),
 				3 => solace.editing = Some((message.id, message.content.clone())),
-				_ => commands.extend(state.prepare_delete(message.channel, message.id)),
+				4 => commands.extend(state.prepare_delete(message.channel, message.id)),
+				_ => {
+					solace.message_menu = match solace.message_menu {
+						Some(open) if open == message.id => None,
+						_ => Some(message.id),
+					}
+				}
 			}
+		}
+		if key == 5 && solace.message_menu == Some(message.id) {
+			let ctx = ui.ctx().clone();
+			crate::menus::message_popup(solace, &ctx, state, commands, message, cell);
 		}
 		x += 32.0;
 	}

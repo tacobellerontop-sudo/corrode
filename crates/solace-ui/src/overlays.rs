@@ -301,7 +301,7 @@ fn account_menu(solace: &mut Solace, ctx: &Context, state: &State) {
 }
 
 /// Dim the window and return the centered dialog rect; `None` once dismissed by the scrim.
-fn modal(
+pub(crate) fn modal(
 	ctx: &Context,
 	id: &str,
 	size: egui::Vec2,
