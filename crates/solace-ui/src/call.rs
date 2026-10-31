@@ -47,6 +47,9 @@ pub(crate) struct CallView {
 	levels: Option<Pos2>,
 	/// The stage fills the whole conversation.
 	pub(crate) full: bool,
+	/// The stage's own button put the window in full screen, so leaving the call (or
+	/// the full-window stage) takes it out again.
+	owns_fullscreen: bool,
 	/// Height chosen with the divider under the stage.
 	height: Option<f32>,
 	focus: Option<Tile>,
@@ -56,6 +59,16 @@ impl CallView {
 	/// A volume popover is open (it closes on Esc before anything else does).
 	pub(crate) fn popover_open(&self) -> bool {
 		self.volume.is_some() || self.levels.is_some()
+	}
+
+	/// Stop filling the window; full screen entered from the stage ends with it.
+	pub(crate) fn leave_full(&mut self, ctx: &egui::Context) {
+		self.full = false;
+		if std::mem::take(&mut self.owns_fullscreen)
+			&& ctx.input(|i| i.viewport().fullscreen.unwrap_or(false))
+		{
+			ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(false));
+		}
 	}
 }
 
@@ -546,7 +559,11 @@ pub(crate) fn show(
 	)
 	.clicked()
 	{
-		solace.call.full = !solace.call.full;
+		if solace.call.full {
+			solace.call.leave_full(ui.ctx());
+		} else {
+			solace.call.full = true;
+		}
 	}
 	// True full screen hides the window's own edges too (F11 anywhere).
 	let fullscreen = ui.input(|i| i.viewport().fullscreen.unwrap_or(false));
@@ -571,6 +588,7 @@ pub(crate) fn show(
 	)
 	.clicked()
 	{
+		solace.call.owns_fullscreen = !fullscreen;
 		if !fullscreen {
 			solace.call.full = true;
 		}
@@ -761,6 +779,7 @@ pub(crate) fn show(
 	)
 	.clicked()
 	{
+		solace.call.leave_full(ui.ctx());
 		solace.call = CallView {
 			height: solace.call.height,
 			..CallView::default()

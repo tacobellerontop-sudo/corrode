@@ -304,3 +304,91 @@ fn focus_mode_toggles_with_the_shortcut_and_leaves_on_escape() {
 	);
 	assert!(solace.focus);
 }
+
+#[test]
+fn focus_and_full_window_calls_end_when_their_conversation_or_call_does() {
+	let ctx = egui::Context::default();
+	install(&ctx).unwrap();
+	let mut solace = Solace::default();
+	let mut state = test_support::demo_state();
+	let run =
+		|events: Vec<egui::Event>, solace: &mut Solace, state: &mut client_core::State| {
+			let input = egui::RawInput {
+				screen_rect: Some(Rect::from_min_size(
+					egui::Pos2::ZERO,
+					egui::vec2(1400.0, 900.0),
+				)),
+				events,
+				..Default::default()
+			};
+			let mut output = ctx.run_ui(input, |ui| {
+				let _ = solace.show(ui, state);
+			});
+			output.textures_delta.clear();
+		};
+	let dm = nav::direct(&state)[0].clone();
+	let _ = state.select(dm.id);
+
+	// Ctrl+K leaves focus mode, since search lives in the sidebar it hides.
+	solace.set_focus(true);
+	run(
+		vec![
+			egui::Event::ModifiersChanged(egui::Modifiers::COMMAND),
+			egui::Event::Key {
+				key: egui::Key::K,
+				physical_key: None,
+				pressed: true,
+				repeat: false,
+				modifiers: egui::Modifiers::COMMAND,
+			},
+		],
+		&mut solace,
+		&mut state,
+	);
+	assert!(!solace.focus, "Ctrl+K leaves focus mode to search");
+
+	// Going Home ends focus, so the next conversation opens with its sidebars.
+	solace.set_focus(true);
+	state.open_home();
+	run(vec![], &mut solace, &mut state);
+	assert!(!solace.focus, "focus mode ends with its conversation");
+
+	// A full-window stage ends with the call, even when the other side hangs up.
+	let _ = state.select(dm.id);
+	let me = state.user.as_ref().unwrap().id;
+	state.voice.active = Some(client_core::voice::Call {
+		channel: dm.id,
+		guild: None,
+		connected_at: None,
+		server_muted: false,
+		server_deafened: false,
+		request: 1,
+		phase: client_core::voice::Phase::Connected,
+		muted: false,
+		deafened: false,
+		participants: vec![client_core::voice::Participant {
+			user: me,
+			muted: false,
+			deafened: false,
+			server_muted: false,
+			server_deafened: false,
+			video: false,
+			streaming: false,
+		}],
+		camera: false,
+		watching: None,
+		error: None,
+	});
+	solace.fill_window_with_call(true);
+	run(vec![], &mut solace, &mut state);
+	assert!(
+		solace.call.full,
+		"the stage fills the window during the call"
+	);
+	state.voice.active = None;
+	run(vec![], &mut solace, &mut state);
+	assert!(
+		!solace.call.full,
+		"the stage stops filling the window once the call ends"
+	);
+}

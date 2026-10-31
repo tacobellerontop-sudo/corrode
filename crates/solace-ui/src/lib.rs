@@ -260,7 +260,12 @@ impl Solace {
 		// A call stage that fills the window is focus mode too; it ends with the call.
 		let in_call = nav::selected_channel(state).is_some_and(|c| call::joined(state, c));
 		if self.call.full && !in_call {
-			self.call.full = false;
+			self.call.leave_full(ui.ctx());
+		}
+		// Focus belongs to a conversation: closing it (Home, a removed channel) ends it, so
+		// the next one opened does not come up without the sidebars.
+		if state.selected.is_none() {
+			self.focus = false;
 		}
 		let focused = state.selected.is_some() && (self.focus || self.call.full);
 		let width = full.width();
@@ -333,8 +338,8 @@ impl Solace {
 		commands
 	}
 
-	/// Ctrl+Shift+F toggles focus mode and F11 full screen; Esc leaves them (and a
-	/// full-window call) unless a dialog, menu or edit is using Esc itself.
+	/// Ctrl+Shift+F toggles focus mode (F11 full screen is in [`chrome::title_bar`]); Esc
+	/// leaves them (and a full-window call) unless a dialog, menu or edit is using Esc itself.
 	fn focus_keys(&mut self, ctx: &egui::Context, state: &State) {
 		let toggle = ctx.input_mut(|i| {
 			i.consume_key(
@@ -344,6 +349,13 @@ impl Solace {
 		});
 		if toggle && state.selected.is_some() {
 			self.set_focus(!self.focus);
+		}
+		// Search lives in the sidebar: Ctrl+K brings it back to type into.
+		if (self.focus || self.call.full)
+			&& ctx.input(|i| i.modifiers.command && i.key_pressed(egui::Key::K))
+		{
+			self.focus = false;
+			self.call.leave_full(ctx);
 		}
 		let overlay = self.settings.is_some()
 			|| self.picker.is_some()
@@ -359,15 +371,12 @@ impl Solace {
 			|| self.call.popover_open()
 			|| ctx.memory(|m| m.has_focus(egui::Id::unique(sidebar::SEARCH_ID)));
 		let fullscreen = ctx.input(|i| i.viewport().fullscreen.unwrap_or(false));
-		if ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::F11)) {
-			ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(!fullscreen));
-		}
 		if !overlay
 			&& (self.focus || self.call.full || fullscreen)
 			&& ctx.input(|i| i.key_pressed(egui::Key::Escape))
 		{
 			self.focus = false;
-			self.call.full = false;
+			self.call.leave_full(ctx);
 			if fullscreen {
 				ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(false));
 			}
