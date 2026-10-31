@@ -60,7 +60,10 @@ InstallDirRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRO
 
 ; UI Pages
 !insertmacro MUI_PAGE_WELCOME
-!insertmacro MUI_PAGE_LICENSE "${DIST_DIR}\LICENSE-MIT"
+; The license page appears when the payload carries the license text.
+!if /FileExists "${DIST_DIR}\LICENSE-MIT"
+  !insertmacro MUI_PAGE_LICENSE "${DIST_DIR}\LICENSE-MIT"
+!endif
 !insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_INSTFILES
 
@@ -165,6 +168,7 @@ Section "Uninstall"
   ; Remove installed files
   Delete "$INSTDIR\${APP_EXE}"
   Delete "$INSTDIR\README.md"
+  Delete "$INSTDIR\README.txt"
   Delete "$INSTDIR\LICENSE-MIT"
   Delete "$INSTDIR\LICENSE-APACHE"
   Delete "$INSTDIR\THIRD_PARTY_NOTICES.md"
@@ -175,6 +179,7 @@ Section "Uninstall"
   RMDir /r "$INSTDIR\licenses"
   RMDir /r "$INSTDIR\source"
 
-  ; Remove installation directory if empty or leftover update staging
-  RMDir /r "$INSTDIR"
+  ; Remove the installation directory only once it is empty, so choosing an existing
+  ; folder at install time never deletes anything else in it.
+  RMDir "$INSTDIR"
 SectionEnd
