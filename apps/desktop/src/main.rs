@@ -23,6 +23,7 @@ mod history;
 mod notification_runtime;
 #[allow(dead_code)]
 mod notification_sounds;
+mod picture;
 mod preferences;
 mod screen;
 #[cfg(feature = "demo")]
@@ -190,6 +191,7 @@ struct Desktop {
 	voice: voice::Voice,
 	uploads: uploads::Uploads,
 	downloads: downloads::Downloads,
+	picture: picture::Picture,
 	audio: audio::Audio,
 	notifications: platform::notifications::Notifications,
 	notification_runtime: notification_runtime::Runtime,
@@ -298,6 +300,7 @@ impl Desktop {
 			voice,
 			uploads: uploads::Uploads::default(),
 			downloads: downloads::Downloads::default(),
+			picture: picture::Picture::default(),
 			audio: audio::Audio::default(),
 			notifications,
 			notification_runtime: Default::default(),
@@ -381,6 +384,7 @@ impl Desktop {
 		self.notifications.clear();
 		self.uploads.cancel();
 		self.downloads.cancel();
+		self.picture.cancel();
 		self.audio.stop();
 		if let Some(store) = &mut self.store {
 			store.cancel_load();
@@ -931,6 +935,17 @@ impl Desktop {
 				request,
 				result: Ok(()),
 			}),
+			Command::EditProfile {
+				user,
+				request,
+				changes,
+			} => Event::ProfileEdited {
+				user,
+				request,
+				result: showcase::own_profile(&self.state, changes.as_ref(), request)
+					.map(Box::new)
+					.ok_or(Failure::Protocol),
+			},
 			Command::History {
 				channel, request, ..
 			} if self.state.selected == Some(channel) => Event::History {
@@ -1119,6 +1134,19 @@ impl Desktop {
 						self.solace.toasts.push(Level::Error, error);
 					}
 				}
+				Request::ChooseProfilePicture(scope) => {
+					let result = if scope.0 != self.state.generation
+						|| self.state.user.as_ref().is_none_or(|own| own.id != scope.1)
+					{
+						Err("Sign in before changing your profile picture")
+					} else {
+						self.picture
+							.start(scope, self.runtime.handle(), ctx, self.window.clone())
+					};
+					if let Err(error) = result {
+						self.solace.accept_profile_picture(ctx, scope, Err(error));
+					}
+				}
 				Request::RemoveAttachment(index) => self.uploads.remove_at(index),
 				Request::CancelUpload => self.uploads.cancel(),
 				Request::OpenLink(url) => ctx.open_url(egui::OpenUrl::new_tab(url)),
@@ -1171,6 +1199,9 @@ impl Desktop {
 
 	fn poll(&mut self, ctx: &egui::Context) {
 		self.poll_cache(ctx);
+		if let Some((scope, result)) = self.picture.poll(&self.state) {
+			self.solace.accept_profile_picture(ctx, scope, result);
+		}
 		self.retry_history_clears();
 		self.poll_credentials(ctx);
 		self.poll_connection();

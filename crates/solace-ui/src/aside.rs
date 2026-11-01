@@ -704,6 +704,6 @@ fn profile_card(solace: &mut Solace, ui: &mut Ui, state: &State, rect: Rect, p: 
 		p.muted,
 	);
 	if response.clicked() {
-		solace.settings = Some(SettingsPage::Account);
+		solace.settings = Some(SettingsPage::Profile);
 	}
 }

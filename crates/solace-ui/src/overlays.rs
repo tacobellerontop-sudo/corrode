@@ -26,7 +26,7 @@ pub fn show(solace: &mut Solace, ui: &mut Ui, state: &mut State, commands: &mut 
 	}
 	solace.media.settings_voice_open = solace.settings == Some(SettingsPage::Voice);
 	if solace.settings.is_some() {
-		settings(solace, &ctx, state);
+		settings(solace, &ctx, state, commands);
 	}
 }
 
@@ -540,14 +540,14 @@ fn join_dialog(solace: &mut Solace, ctx: &Context, state: &mut State, commands: 
 	}
 }
 
-fn settings(solace: &mut Solace, ctx: &Context, state: &State) {
+fn settings(solace: &mut Solace, ctx: &Context, state: &mut State, commands: &mut Vec<Command>) {
 	let Some(page) = solace.settings else {
 		return;
 	};
 	let screen = ctx.content_rect();
 	let size = vec2(
 		720.0f32.min(screen.width() - 40.0),
-		500.0f32.min(screen.height() - 40.0),
+		540.0f32.min(screen.height() - 40.0),
 	);
 	let mut next = None;
 	let mut close = false;
@@ -573,6 +573,7 @@ fn settings(solace: &mut Solace, ctx: &Context, state: &State) {
 		);
 		for (i, (item, icon, label)) in [
 			(SettingsPage::Appearance, Icon::Sun, "Appearance"),
+			(SettingsPage::Profile, Icon::Pencil, "Profile"),
 			(SettingsPage::Account, Icon::People, "Account"),
 			(SettingsPage::Voice, Icon::Mic, "Voice"),
 			(SettingsPage::About, Icon::Logo, "About"),
@@ -636,11 +637,19 @@ fn settings(solace: &mut Solace, ctx: &Context, state: &State) {
 		child.set_clip_rect(body.expand(4.0));
 		match page {
 			SettingsPage::Appearance => appearance(solace, &mut child, body, p),
+			SettingsPage::Profile => {
+				crate::profile_edit::page(solace, &mut child, body, state, commands, p)
+			}
 			SettingsPage::Account => account(solace, &mut child, body, state, p),
 			SettingsPage::Voice => voice(solace, &mut child, body, p),
 			SettingsPage::About => about(solace, &mut child, body, p),
 		}
 	});
+	let leaving = (close || dismissed || next.is_some_and(|n| n != page))
+		&& page == SettingsPage::Profile;
+	if leaving {
+		crate::profile_edit::leave(state);
+	}
 	if let Some(next) = next {
 		if next == SettingsPage::Voice {
 			solace.media.voice_refresh_devices = true;
@@ -653,7 +662,7 @@ fn settings(solace: &mut Solace, ctx: &Context, state: &State) {
 	}
 }
 
-fn heading(ui: &Ui, at: Pos2, title: &str, subtitle: &str, p: &Palette) {
+pub(crate) fn heading(ui: &Ui, at: Pos2, title: &str, subtitle: &str, p: &Palette) {
 	paint::label(
 		ui.painter(),
 		at + vec2(0.0, 16.0),

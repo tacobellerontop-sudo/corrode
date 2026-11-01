@@ -635,3 +635,57 @@ pub fn search_page(state: &State, query: Option<&str>) -> model::SearchPage {
 		pin_cursor: None,
 	}
 }
+
+/// The showcase account's profile, with `changes` applied when saving. The showcase keeps it
+/// only in `State::own_profile`; a new picture gets a fresh synthetic hash so the interface
+/// shows the locally chosen pixels.
+#[allow(dead_code)]
+pub fn own_profile(
+	state: &State,
+	changes: Option<&model::ProfileEdit>,
+	request: u64,
+) -> Option<model::UserProfile> {
+	let user = state.user.clone()?;
+	let mut profile = state
+		.own_profile
+		.data
+		.clone()
+		.unwrap_or_else(|| model::UserProfile {
+			username: user.name.clone(),
+			user: user.clone(),
+			global_name: None,
+			banner: None,
+			accent_color: None,
+			bio: "Designing calm interfaces. Tea, trails and type.".into(),
+			pronouns: "she/her".into(),
+			badges: vec![],
+			connections: vec![],
+			mutual_guilds: vec![],
+			guild: None,
+			theme_colors: None,
+			clan: None,
+			limited: false,
+		});
+	if let Some(changes) = changes {
+		if let Some(name) = &changes.global_name {
+			profile.global_name = name.clone();
+			// Like the service, the account's shown name is the display name or the username.
+			profile.user.name = name.clone().unwrap_or_else(|| profile.username.clone());
+		}
+		if let Some(bio) = &changes.bio {
+			profile.bio = bio.clone();
+		}
+		if let Some(pronouns) = &changes.pronouns {
+			profile.pronouns = pronouns.clone();
+		}
+		if let Some(color) = changes.accent_color {
+			profile.accent_color = color;
+		}
+		match &changes.avatar {
+			Some(Some(_)) => profile.user.avatar = Some(hash(0xa7a7 + request)),
+			Some(None) => profile.user.avatar = None,
+			None => {}
+		}
+	}
+	Some(profile)
+}
