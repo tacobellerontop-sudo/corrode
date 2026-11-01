@@ -175,6 +175,47 @@ fn main() -> eframe::Result {
 				solace.open_thread(None);
 				showcase::call_scene(&mut state, &mut solace);
 			}
+			if call && args.iter().any(|a| a == "--share") {
+				use client_core::screen::{Source, SourceId};
+				let screen = &mut solace.media.screen;
+				screen.supported = true;
+				screen.audio_supported = true;
+				screen.sources = vec![
+					Source { id: SourceId::Display(1), name: "Screen 1 (2560 × 1440)".into() },
+					Source { id: SourceId::Display(2), name: "Screen 2 (1920 × 1080)".into() },
+					Source { id: SourceId::Window(3), name: "Figma – Solace call stage".into() },
+					Source { id: SourceId::Window(4), name: "Visual Studio Code – corrode".into() },
+					Source { id: SourceId::Window(5), name: "Spotify Premium".into() },
+					Source { id: SourceId::Window(6), name: "Notes".into() },
+				];
+				screen.selected = Some(SourceId::Window(3));
+				screen.status = "Choose a screen or window";
+				solace.open_share_picker();
+			}
+			if call && args.iter().any(|a| a == "--sharing") {
+				// A stand-in for the captured screen: a soft diagonal wash with a window on it.
+				let (w, h) = (640usize, 360usize);
+				let mut pixels = Vec::with_capacity(w * h);
+				for y in 0..h {
+					for x in 0..w {
+						let t = (x + y) as f32 / (w + h) as f32;
+						let inside = (120..520).contains(&x) && (60..300).contains(&y);
+						let bar = inside && y < 84;
+						pixels.push(if bar {
+							egui::Color32::from_rgb(0x2b, 0x2d, 0x31)
+						} else if inside {
+							egui::Color32::from_rgb(0xf4, 0xf2, 0xee)
+						} else {
+							egui::Color32::from_rgb((40.0 + 60.0 * t) as u8, (70.0 + 40.0 * t) as u8, (120.0 + 50.0 * t) as u8)
+						});
+					}
+				}
+				let image = egui::ColorImage { size: [w, h], source_size: egui::vec2(w as f32, h as f32), pixels };
+				let screen = &mut solace.media.screen;
+				screen.preview = Some(cc.egui_ctx.load_texture("preview-share", image, egui::TextureOptions::LINEAR));
+				screen.busy = true;
+				screen.status = "Sharing your screen";
+			}
 			if args.iter().any(|a| a == "--focus") {
 				solace.open_thread(None);
 				solace.set_focus(true);

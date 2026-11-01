@@ -38,8 +38,8 @@ pub mod screen {
 	}
 }
 
-/// Screen-share selection. Solace does not offer screen sharing in its interface yet; the
-/// engine still consults this so an active share from elsewhere is stopped cleanly.
+/// Screen sharing (Go Live) in a call. The call stage opens the picker and records a start or
+/// stop request; the desktop engine fills in sources, status and the local preview.
 #[derive(Default)]
 pub struct ScreenUi {
 	pub context: Option<(u64, Id, u64)>,
@@ -52,6 +52,8 @@ pub struct ScreenUi {
 	pub status: &'static str,
 	pub capture_status: Option<&'static str>,
 	pub supported: bool,
+	/// The computer's sound can be shared along with the screen.
+	pub audio_supported: bool,
 	pub preview: Option<egui::TextureHandle>,
 }
 

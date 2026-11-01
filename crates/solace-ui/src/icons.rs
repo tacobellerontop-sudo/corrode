@@ -52,6 +52,10 @@ pub enum Icon {
 	Play,
 	Pause,
 	Screen,
+	/// A screen with an arrow rising out of it: share your screen.
+	ScreenShare,
+	/// A circular arrow: look again.
+	Refresh,
 	Expand,
 	Collapse,
 	SpeakerOff,
@@ -419,6 +423,17 @@ fn draw(pen: &Pen, icon: Icon) {
 			pen.rounded(3.0, 4.5, 18.0, 12.0, 2.2);
 			pen.line(&[(9.0, 20.0), (15.0, 20.0)]);
 			pen.line(&[(12.0, 16.5), (12.0, 20.0)]);
+		}
+		Icon::ScreenShare => {
+			pen.rounded(3.0, 4.5, 18.0, 12.0, 2.2);
+			pen.line(&[(9.0, 20.0), (15.0, 20.0)]);
+			pen.line(&[(12.0, 16.5), (12.0, 20.0)]);
+			pen.line(&[(12.0, 13.5), (12.0, 8.0)]);
+			pen.line(&[(9.5, 10.5), (12.0, 8.0), (14.5, 10.5)]);
+		}
+		Icon::Refresh => {
+			pen.arc(12.0, 12.0, 7.0, -0.9, 4.2);
+			pen.line(&[(16.0, 3.5), (16.5, 6.8), (13.2, 7.4)]);
 		}
 		Icon::Expand => {
 			pen.line(&[(14.0, 4.5), (19.5, 4.5), (19.5, 10.0)]);

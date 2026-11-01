@@ -1,6 +1,7 @@
 //! The call stage. When you are in a call in a direct conversation, everyone in it fills a
 //! dark stage above the timeline, one tile each, with their screen shares beside them. A tile
 //! can be focused, streams are watched from their tile, and anyone's volume is one click away.
+//! Your own screen goes live from the stage's share button and shows as a tile of its own.
 use crate::{
 	Solace,
 	aside::find_user,
@@ -13,6 +14,7 @@ use crate::{
 };
 use client_core::{
 	Command, State,
+	screen::{Settings, SourceId},
 	voice::{Participant, Phase},
 };
 use egui::{Align2, Area, Color32, Order, Pos2, Rect, Sense, Stroke, StrokeKind, Ui, pos2, vec2};
@@ -53,12 +55,63 @@ pub(crate) struct CallView {
 	/// Height chosen with the divider under the stage.
 	height: Option<f32>,
 	focus: Option<Tile>,
+	/// Go Live picker anchor, while it is open.
+	share: Option<Pos2>,
+	/// Quality last chosen in the picker.
+	quality: Quality,
+	/// Go Live was pressed and the engine has not picked the request up yet.
+	share_asked: bool,
+	/// You were sharing last frame, to notice a share that stopped by itself.
+	share_seen: bool,
+	/// You pressed stop, so the share ending needs no notice.
+	share_stopping: bool,
+}
+
+/// Resolution, frame rate and sound for the next share.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct Quality {
+	height: u32,
+	fps: u32,
+	audio: bool,
+}
+
+impl Default for Quality {
+	fn default() -> Self {
+		Self {
+			height: 720,
+			fps: 30,
+			audio: true,
+		}
+	}
+}
+
+impl Quality {
+	fn settings(self, source: SourceId, audio_supported: bool) -> Settings {
+		let width = match self.height {
+			480 => 854,
+			1080 => 1920,
+			_ => 1280,
+		};
+		Settings {
+			source,
+			width,
+			height: self.height,
+			fps: self.fps,
+			cursor: true,
+			audio: self.audio && audio_supported,
+		}
+	}
 }
 
 impl CallView {
 	/// A volume popover is open (it closes on Esc before anything else does).
 	pub(crate) fn popover_open(&self) -> bool {
-		self.volume.is_some() || self.levels.is_some()
+		self.volume.is_some() || self.levels.is_some() || self.share.is_some()
+	}
+
+	/// Open the Go Live picker; it anchors itself to the share button.
+	pub(crate) fn open_share_picker(&mut self) {
+		self.share = Some(Pos2::ZERO);
 	}
 
 	/// Stop filling the window; full screen entered from the stage ends with it.
@@ -293,9 +346,13 @@ fn track_streams(solace: &mut Solace, state: &State, people: &[Participant]) {
 	}
 }
 
-fn tiles(solace: &Solace, state: &State, people: &[Participant]) -> Vec<Tile> {
+fn tiles(solace: &Solace, state: &State, people: &[Participant], sharing: bool) -> Vec<Tile> {
 	let own = state.user.as_ref().map(|u| u.id);
 	let mut tiles: Vec<Tile> = people.iter().map(|p| Tile::Person(p.user)).collect();
+	// Your own screen comes first among the streams, so you can see what everyone sees.
+	if let Some(own) = own.filter(|_| sharing) {
+		tiles.push(Tile::Stream(own));
+	}
 	for person in people {
 		if person.streaming && Some(person.user) != own {
 			tiles.push(Tile::Stream(person.user));
@@ -463,7 +520,9 @@ pub(crate) fn show(
 	};
 	let people = people(state);
 	track_streams(solace, state, &people);
-	let tiles = tiles(solace, state, &people);
+	let own = state.user.as_ref().map(|u| u.id);
+	let sharing = track_share(solace, state);
+	let tiles = tiles(solace, state, &people, sharing);
 	if solace.call.focus.is_some_and(|f| !tiles.contains(&f)) {
 		solace.call.focus = None;
 	}
@@ -624,6 +683,9 @@ pub(crate) fn show(
 				let person = people.iter().find(|p| p.user == user).copied();
 				person_tile(solace, &mut tile_ui, state, person, user, shown, &s, &p);
 			}
+			Tile::Stream(user) if Some(user) == own => {
+				own_stream_tile(solace, &mut tile_ui, user, shown, &s);
+			}
 			Tile::Stream(user) => {
 				stream_tile(solace, &mut tile_ui, state, user, watching, shown, &s);
 			}
@@ -633,7 +695,7 @@ pub(crate) fn show(
 	// Controls.
 	let size = 46.0;
 	let leave_w = 64.0;
-	let count = 5.0;
+	let count = 6.0;
 	let total = count * size + (count - 1.0) * 12.0 + 12.0 + leave_w;
 	let y = rect.bottom() - BAR / 2.0;
 	let mut x = rect.center().x - total / 2.0;
@@ -645,6 +707,7 @@ pub(crate) fn show(
 	let mic = next(size);
 	let ears = next(size);
 	let cam = next(size);
+	let share = next(size);
 	let levels = next(size);
 	let focus_btn = next(size);
 	x += 12.0;
@@ -710,6 +773,40 @@ pub(crate) fn show(
 			None => {}
 		}
 	}
+	if solace.call.share.is_some() {
+		// Follow the button as the stage resizes.
+		solace.call.share = Some(share.center_top());
+	}
+	let share_response = control(
+		ui,
+		ui.scope_id().with("call-share"),
+		share,
+		Icon::ScreenShare,
+		sharing || solace.call.share.is_some(),
+		false,
+		if sharing {
+			"Stop sharing your screen"
+		} else {
+			"Share your screen"
+		},
+		&s,
+	);
+	if share_response.clicked() {
+		if sharing {
+			solace.media.screen.request = Some(crate::media::screen::Request::Stop);
+			solace.call.share_stopping = true;
+			if solace.call.focus == own.map(Tile::Stream) {
+				solace.call.focus = None;
+			}
+		} else if solace.call.share.is_some() {
+			solace.call.share = None;
+		} else {
+			solace.call.share = Some(share.center_top());
+			solace.media.screen.refresh_requested = true;
+			solace.call.levels = None;
+			solace.call.volume = None;
+		}
+	}
 	let levels_response = control(
 		ui,
 		ui.scope_id().with("call-levels"),
@@ -726,6 +823,7 @@ pub(crate) fn show(
 			None => Some(levels.center_top()),
 		};
 		solace.call.volume = None;
+		solace.call.share = None;
 	}
 	let focus_on = solace.call.focus.is_some();
 	if control(
@@ -782,8 +880,10 @@ pub(crate) fn show(
 		solace.call.leave_full(ui.ctx());
 		solace.call = CallView {
 			height: solace.call.height,
+			quality: solace.call.quality,
 			..CallView::default()
 		};
+		solace.media.screen.open = false;
 		commands.extend(state.leave_call());
 	}
 
@@ -794,6 +894,39 @@ pub(crate) fn show(
 	if let Some((user, anchor)) = solace.call.volume {
 		volume_popover(solace, &ctx, state, user, anchor, &p);
 	}
+	if let Some(anchor) = solace.call.share {
+		share_popover(solace, &ctx, anchor, &p);
+	}
+	solace.media.screen.open = solace.call.share.is_some();
+}
+
+/// Tell the engine which call a share belongs to, and notice a share that failed to start or
+/// stopped by itself. Returns whether your screen is shared (or starting, or stopping).
+fn track_share(solace: &mut Solace, state: &State) -> bool {
+	let screen = &mut solace.media.screen;
+	screen.context = state
+		.voice
+		.active
+		.as_ref()
+		.map(|call| (state.generation, call.channel, call.request));
+	let busy = screen.busy;
+	let status = screen.status;
+	let mut notice = None;
+	if solace.call.share_asked && screen.request.is_none() {
+		// The engine has seen the request: it either started or said why not.
+		solace.call.share_asked = false;
+		if !busy {
+			notice = Some(status);
+		}
+	}
+	if solace.call.share_seen && !busy && !std::mem::take(&mut solace.call.share_stopping) {
+		notice = Some(status);
+	}
+	solace.call.share_seen = busy;
+	if let Some(message) = notice.filter(|m| !m.is_empty()) {
+		solace.toasts.push(crate::Level::Warning, message);
+	}
+	busy
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1215,6 +1348,132 @@ fn stream_tile(
 	}
 }
 
+/// Your own screen while you share it: the local preview, or how far the share has got.
+fn own_stream_tile(solace: &mut Solace, ui: &mut Ui, own: Id, rect: Rect, s: &Stage) {
+	let response = ui.interact(rect, ui.scope_id().with("tile"), Sense::click());
+	ui.painter()
+		.rect_filled(rect, 14, Color32::from_rgb(0x0b, 0x0c, 0x0d));
+	ui.painter().rect_stroke(
+		rect,
+		14,
+		Stroke::new(1.0, Color32::from_white_alpha(14)),
+		StrokeKind::Inside,
+	);
+	let center = rect.center();
+	let screen = &solace.media.screen;
+	let status = screen
+		.capture_status
+		.filter(|s| !s.is_empty())
+		.unwrap_or(screen.status);
+	let previewing = if let Some(texture) = &screen.preview {
+		// Letterbox like any other stream, so you see exactly what everyone else sees.
+		let size = texture.size_vec2();
+		let scale = (rect.width() / size.x).min(rect.height() / size.y);
+		ui.painter().image(
+			texture.id(),
+			Rect::from_center_size(center, size * scale),
+			Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)),
+			Color32::WHITE,
+		);
+		true
+	} else {
+		let time = motion::ticker(ui.ctx());
+		for i in 0..3 {
+			let phase = ((time * 4.0 - i as f64 * 0.6).sin() * 0.5 + 0.5) as f32;
+			ui.painter().circle_filled(
+				center + vec2((i as f32 - 1.0) * 16.0, -10.0),
+				4.0,
+				s.text.gamma_multiply(0.3 + 0.7 * phase),
+			);
+		}
+		let galley = paint::line(
+			ui.painter(),
+			if status.is_empty() {
+				"Starting your stream…"
+			} else {
+				status
+			},
+			theme::sans(12.5),
+			s.soft,
+			rect.width() - 32.0,
+		);
+		ui.painter().galley(
+			center + vec2(-galley.size().x / 2.0, 18.0 - galley.size().y / 2.0),
+			galley,
+			s.soft,
+		);
+		false
+	};
+
+	// Stop Sharing sits in the middle on hover, and always while there is no picture yet.
+	let stop = Rect::from_center_size(
+		center + vec2(0.0, if previewing { 0.0 } else { 52.0 }),
+		vec2(132.0, 34.0),
+	);
+	let show_stop = (!previewing || response.hovered() || ui.rect_contains_pointer(stop))
+		&& rect.height() >= 120.0
+		&& !solace.call.share_stopping;
+	let mut stopped = false;
+	if show_stop
+		&& paint::pill_button(
+			ui,
+			ui.scope_id().with("stop-share"),
+			stop,
+			Some(Icon::Close),
+			"Stop Sharing",
+			ButtonKind::Danger,
+			true,
+		)
+		.clicked()
+	{
+		solace.media.screen.request = Some(crate::media::screen::Request::Stop);
+		solace.call.share_stopping = true;
+		stopped = true;
+	}
+
+	let badge = Rect::from_min_size(rect.left_top() + vec2(12.0, 12.0), vec2(42.0, 20.0));
+	ui.painter()
+		.rect_filled(badge, 6, Color32::from_rgb(0xd9, 0x4f, 0x45));
+	ui.painter().text(
+		badge.center(),
+		Align2::CENTER_CENTER,
+		"LIVE",
+		theme::semibold(10.5),
+		Color32::WHITE,
+	);
+	if rect.height() >= 150.0 {
+		let galley =
+			ui.painter()
+				.layout_no_wrap("Your screen".to_owned(), theme::medium(12.5), s.text);
+		let chip = Rect::from_min_size(
+			rect.left_bottom() + vec2(10.0, -36.0),
+			vec2((galley.size().x + 36.0).min(rect.width() - 20.0), 26.0),
+		);
+		ui.painter()
+			.rect_filled(chip, 8, Color32::from_black_alpha(150));
+		icons::paint_at(
+			ui.painter(),
+			Icon::ScreenShare,
+			chip.left_center() + vec2(15.0, 0.0),
+			14.0,
+			s.soft,
+		);
+		ui.painter().with_clip_rect(chip.shrink(2.0)).galley(
+			pos2(chip.left() + 28.0, chip.center().y - galley.size().y / 2.0),
+			galley,
+			s.text,
+		);
+	}
+	if response.clicked() && !stopped {
+		let tile = Tile::Stream(own);
+		solace.call.focus = if solace.call.focus == Some(tile) {
+			None
+		} else {
+			Some(tile)
+		};
+	}
+}
+
 /// Light pill on the dark stage.
 fn stage_pill(ui: &mut Ui, id: egui::Id, rect: Rect, text: &str) -> egui::Response {
 	let response = ui.interact(rect, id, Sense::click());
@@ -1281,6 +1540,313 @@ fn place(ctx: &egui::Context, anchor: Pos2, size: egui::Vec2, above: bool) -> Re
 		.y
 		.clamp(screen.top(), (screen.bottom() - size.y).max(screen.top()));
 	Rect::from_min_size(pos2(x, y), size)
+}
+
+/// Rows of the source list visible before it scrolls.
+const SHARE_ROWS: usize = 5;
+const SHARE_ROW: f32 = 40.0;
+
+/// One choice in a row of segments; returns whether it was clicked.
+fn segment(ui: &mut Ui, id: egui::Id, rect: Rect, text: &str, on: bool, p: &Palette) -> bool {
+	let response = ui.interact(rect, id, Sense::click());
+	let t = paint::hover_t(ui, &response);
+	if on {
+		ui.painter().rect_filled(rect, 8, p.accent);
+	} else {
+		ui.painter()
+			.rect_filled(rect, 8, mix(p.surface_alt, p.hover, t));
+	}
+	ui.painter().text(
+		rect.center(),
+		Align2::CENTER_CENTER,
+		text,
+		theme::medium(12.5),
+		if on { p.accent_text } else { p.text },
+	);
+	response.clicked()
+}
+
+/// A labelled row of segments in the Go Live picker.
+fn segments<T: Copy + PartialEq>(
+	ui: &mut Ui,
+	at: Pos2,
+	width: f32,
+	label: &str,
+	options: &[(T, &str)],
+	value: &mut T,
+	p: &Palette,
+) {
+	ui.painter()
+		.text(at, Align2::LEFT_CENTER, label, theme::medium(13.0), p.text);
+	let w = 58.0;
+	let mut x = at.x + width - options.len() as f32 * (w + 4.0) + 4.0;
+	for (option, text) in options {
+		let rect = Rect::from_min_size(pos2(x, at.y - 14.0), vec2(w, 28.0));
+		if segment(
+			ui,
+			ui.scope_id().with(("share-segment", label, *text)),
+			rect,
+			text,
+			*value == *option,
+			p,
+		) {
+			*value = *option;
+		}
+		x += w + 4.0;
+	}
+}
+
+/// Go Live: pick a screen or window and how sharp and smooth it should be.
+fn share_popover(solace: &mut Solace, ctx: &egui::Context, anchor: Pos2, p: &Palette) {
+	let screen = &solace.media.screen;
+	let rows = screen.sources.len().clamp(1, SHARE_ROWS);
+	let list_h = rows as f32 * SHARE_ROW;
+	let audio_row = if screen.audio_supported { 44.0 } else { 0.0 };
+	let size = vec2(380.0, 64.0 + list_h + 16.0 + 92.0 + audio_row + 62.0);
+	let rect = place(ctx, anchor, size, true);
+	let a = motion::appear(ctx, egui::Id::unique("call-share-pop"), 0.18);
+	Area::new(egui::Id::unique("call-share-area"))
+		.order(Order::Foreground)
+		.fixed_pos(rect.min)
+		.show(ctx, |ui| {
+			ui.multiply_opacity(a);
+			let shown = rect.translate(vec2(0.0, (1.0 - a) * 8.0));
+			let _ = ui.allocate_exact_size(size, Sense::click());
+			paint::floating(ui.painter(), shown, 16, p);
+			ui.painter().text(
+				shown.left_top() + vec2(18.0, 26.0),
+				Align2::LEFT_CENTER,
+				"Share your screen",
+				theme::serif(17.0),
+				p.text,
+			);
+			// Look again, for a window opened since the picker was.
+			let refresh =
+				Rect::from_center_size(shown.right_top() + vec2(-30.0, 26.0), vec2(28.0, 28.0));
+			let media = &mut solace.media;
+			let scanning =
+				media.screen.supported && media.screen.status == "Looking for screens and windows…";
+			if paint::icon_button(
+				ui,
+				ui.scope_id().with("share-refresh"),
+				refresh,
+				Icon::Refresh,
+				ButtonKind::Ghost,
+				false,
+				"Look for screens and windows again",
+			)
+			.clicked() && !scanning
+			{
+				media.screen.refresh_requested = true;
+			}
+			let w = shown.width() - 36.0;
+			let list = Rect::from_min_size(
+				shown.left_top() + vec2(10.0, 50.0),
+				vec2(shown.width() - 20.0, list_h),
+			);
+			if media.screen.sources.is_empty() {
+				let message = if !media.screen.supported {
+					"Screen sharing isn't available on this computer."
+				} else if media.screen.status.is_empty() {
+					"Looking for screens and windows…"
+				} else {
+					media.screen.status
+				};
+				paint::text_left(
+					ui.painter(),
+					list.left_center() + vec2(8.0, 0.0),
+					message,
+					theme::sans(13.0),
+					p.muted,
+					list.width() - 16.0,
+				);
+			} else {
+				let mut list_ui = ui.new_child(
+					egui::UiBuilder::new()
+						.max_rect(list)
+						.id_salt("share-sources"),
+				);
+				egui::ScrollArea::vertical()
+					.max_height(list_h)
+					.auto_shrink([false, true])
+					.show(&mut list_ui, |ui| {
+						ui.spacing_mut().item_spacing.y = 0.0;
+						for source in &media.screen.sources {
+							let (row, response) = ui
+								.allocate_exact_size(vec2(list.width(), SHARE_ROW), Sense::click());
+							let selected = media.screen.selected == Some(source.id);
+							let t = paint::hover_t(ui, &response);
+							let fill = if selected {
+								p.accent_soft
+							} else {
+								p.hover.gamma_multiply(t)
+							};
+							ui.painter()
+								.rect_filled(row.shrink2(vec2(0.0, 2.0)), 10, fill);
+							let icon = match source.id {
+								SourceId::Display(_) => Icon::Screen,
+								SourceId::Window(_) => Icon::WindowMaximize,
+							};
+							icons::paint_at(
+								ui.painter(),
+								icon,
+								row.left_center() + vec2(20.0, 0.0),
+								17.0,
+								if selected { p.accent } else { p.muted },
+							);
+							let name = if source.name.trim().is_empty() {
+								"Untitled window"
+							} else {
+								source.name.as_str()
+							};
+							paint::text_left(
+								ui.painter(),
+								row.left_center() + vec2(40.0, 0.0),
+								name,
+								if selected {
+									theme::medium(13.5)
+								} else {
+									theme::sans(13.5)
+								},
+								p.text,
+								row.width() - 76.0,
+							);
+							if selected {
+								icons::paint_at(
+									ui.painter(),
+									Icon::Check,
+									row.right_center() - vec2(20.0, 0.0),
+									16.0,
+									p.accent,
+								);
+							}
+							if response.clicked() {
+								media.screen.selected = Some(source.id);
+							}
+						}
+					});
+			}
+			let mut y = list.bottom() + 16.0;
+			paint::hairline(
+				ui.painter(),
+				pos2(shown.left() + 18.0, y - 8.0),
+				pos2(shown.right() - 18.0, y - 8.0),
+				p,
+			);
+			let quality = &mut solace.call.quality;
+			segments(
+				ui,
+				pos2(shown.left() + 18.0, y + 22.0),
+				w,
+				"Resolution",
+				&[(480, "480p"), (720, "720p"), (1080, "1080p")],
+				&mut quality.height,
+				p,
+			);
+			segments(
+				ui,
+				pos2(shown.left() + 18.0, y + 64.0),
+				w,
+				"Frame rate",
+				&[(15, "15"), (30, "30"), (60, "60")],
+				&mut quality.fps,
+				p,
+			);
+			y += 92.0;
+			if media.screen.audio_supported {
+				let row = Rect::from_min_size(
+					pos2(shown.left() + 10.0, y + 2.0),
+					vec2(shown.width() - 20.0, 40.0),
+				);
+				let response = ui.interact(row, ui.scope_id().with("share-audio"), Sense::click());
+				let t = paint::hover_t(ui, &response);
+				ui.painter().rect_filled(row, 10, p.hover.gamma_multiply(t));
+				icons::paint_at(
+					ui.painter(),
+					Icon::Speaker,
+					row.left_center() + vec2(18.0, 0.0),
+					16.0,
+					p.muted,
+				);
+				ui.painter().text(
+					row.left_center() + vec2(36.0, 0.0),
+					Align2::LEFT_CENTER,
+					"Share sound too",
+					theme::sans(13.5),
+					p.text,
+				);
+				let switch =
+					Rect::from_center_size(row.right_center() - vec2(28.0, 0.0), vec2(40.0, 22.0));
+				let on = ui.ctx().animate_bool_with_time(
+					ui.scope_id().with("share-audio-anim"),
+					quality.audio,
+					0.15,
+				);
+				ui.painter()
+					.rect_filled(switch, 11, mix(p.border, p.accent, on));
+				ui.painter().circle_filled(
+					pos2(switch.left() + 11.0 + on * 18.0, switch.center().y),
+					8.0,
+					Color32::WHITE,
+				);
+				if response.clicked() {
+					quality.audio = !quality.audio;
+				}
+				y += audio_row;
+			}
+			let go = Rect::from_min_size(
+				pos2(shown.right() - 18.0 - 124.0, y + 12.0),
+				vec2(124.0, 36.0),
+			);
+			let ready =
+				media.screen.supported && !media.screen.busy && media.screen.selected.is_some();
+			let response = paint::pill_button(
+				ui,
+				ui.scope_id().with("share-go"),
+				go,
+				Some(Icon::ScreenShare),
+				"Go Live",
+				ButtonKind::Primary,
+				ready,
+			);
+			let hint = format!(
+				"{}p · {} fps{}",
+				quality.height,
+				quality.fps,
+				if quality.audio && media.screen.audio_supported {
+					" · with sound"
+				} else {
+					""
+				}
+			);
+			paint::text_left(
+				ui.painter(),
+				pos2(shown.left() + 18.0, go.center().y),
+				&hint,
+				theme::sans(12.5),
+				p.muted,
+				go.left() - shown.left() - 30.0,
+			);
+			if response.clicked()
+				&& let Some(source) = media.screen.selected
+			{
+				let settings = quality.settings(source, media.screen.audio_supported);
+				media.screen.request = Some(crate::media::screen::Request::Start(settings));
+				solace.call.share_asked = true;
+				solace.call.share_stopping = false;
+				solace.call.share = None;
+			}
+		});
+	let on_button = ctx.input(|i| {
+		i.pointer
+			.interact_pos()
+			.is_some_and(|pos| pos.distance(anchor) < 30.0)
+	});
+	if (clicked_outside(ctx, rect.expand(4.0)) && !on_button)
+		|| ctx.input(|i| i.key_pressed(egui::Key::Escape))
+	{
+		solace.call.share = None;
+	}
 }
 
 fn levels_popover(solace: &mut Solace, ctx: &egui::Context, anchor: Pos2, p: &Palette) {
@@ -1460,6 +2026,23 @@ fn volume_popover(
 #[cfg(test)]
 mod tests {
 	use super::*;
+
+	#[test]
+	fn every_quality_in_the_picker_is_one_the_engine_accepts() {
+		for height in [480, 720, 1080] {
+			for fps in [15, 30, 60] {
+				for audio in [false, true] {
+					let quality = Quality { height, fps, audio };
+					for source in [SourceId::Display(1), SourceId::Window(7)] {
+						let settings = quality.settings(source, false);
+						assert!(settings.valid(), "{height}p {fps} fps");
+						assert!(!settings.audio, "no sound where it can't be captured");
+						assert_eq!(quality.settings(source, true).audio, audio);
+					}
+				}
+			}
+		}
+	}
 
 	#[test]
 	fn grid_tiles_fit_and_do_not_overlap() {
