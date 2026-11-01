@@ -57,8 +57,27 @@ impl eframe::App for Preview {
 			if self.call && (self.frames == 1 || self.frames == 4) {
 				showcase::end_stream(&mut self.state);
 			}
-			let _ = self.solace.show(ui, &mut self.state);
+			let commands = self.solace.show(ui, &mut self.state);
 			let _ = self.solace.take_requests();
+			// Answer profile loads and saves the way the offline showcase does.
+			for command in commands {
+				if let client_core::Command::EditProfile {
+					user,
+					request,
+					changes,
+				} = command && let Some(profile) =
+					showcase::own_profile(&self.state, changes.as_ref(), request)
+				{
+					self.state.apply(client_core::Envelope {
+						generation: self.state.generation,
+						event: client_core::Event::ProfileEdited {
+							user,
+							request,
+							result: Ok(Box::new(profile)),
+						},
+					});
+				}
+			}
 			// Answer search and pins requests the way the offline showcase does.
 			if let Some(view) = self.state.search.as_ref().filter(|v| v.loading) {
 				let query = (!view.pins).then(|| view.query.clone());
@@ -181,6 +200,9 @@ fn main() -> eframe::Result {
 			}
 			if args.iter().any(|a| a == "--call-full") {
 				solace.fill_window_with_call(true);
+			}
+			if args.iter().any(|a| a == "--settings-profile") {
+				solace.open_settings(solace_ui::SettingsPage::Profile);
 			}
 			if args.iter().any(|a| a == "--settings-voice") {
 				solace.open_settings(solace_ui::SettingsPage::Voice);

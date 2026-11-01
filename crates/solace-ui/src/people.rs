@@ -434,7 +434,7 @@ fn card(solace: &mut Solace, ui: &mut Ui, state: &mut State, commands: &mut Vec<
 		Some(Action::RemoveFriend) => solace.confirm = Some(Confirm::RemoveFriend(user_id)),
 		Some(Action::Block) => solace.confirm = Some(Confirm::Block(user_id)),
 		Some(Action::Unblock) => commands.extend(state.set_user_blocked(user_id, false)),
-		Some(Action::EditOwn) => solace.settings = Some(SettingsPage::Account),
+		Some(Action::EditOwn) => solace.settings = Some(SettingsPage::Profile),
 		Some(Action::CopyId) => {
 			ctx.copy_text(user_id.0.to_string());
 			solace.toasts.push(crate::Level::Info, "Copied user ID");

@@ -24,6 +24,7 @@ mod finder;
 mod menus;
 mod overlays;
 mod people;
+mod profile_edit;
 mod rail;
 mod sidebar;
 pub mod signin;
@@ -69,6 +70,9 @@ pub enum Request {
 	/// Pause (true) or resume (false) the active audio attachment.
 	PauseAudio(bool),
 	SeekAudio(f32),
+	/// Open the image picker for a new profile picture; answer with
+	/// [`Solace::accept_profile_picture`] and the same scope (generation, account, revision).
+	ChooseProfilePicture((u64, Id, u64)),
 }
 
 /// Playback of one audio attachment, reported by the desktop's audio engine.
@@ -96,6 +100,7 @@ pub enum Pane {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SettingsPage {
 	Appearance,
+	Profile,
 	Account,
 	Voice,
 	About,
@@ -176,6 +181,8 @@ pub struct Solace {
 	pub(crate) confirm: Option<menus::Confirm>,
 	/// The message whose "More" menu is open from its hover bar.
 	pub(crate) message_menu: Option<Id>,
+	/// Settings › Profile: the unsaved profile draft.
+	pub(crate) profile_editor: profile_edit::Editor,
 }
 
 impl Default for Solace {
@@ -223,6 +230,7 @@ impl Default for Solace {
 			add_friend: None,
 			confirm: None,
 			message_menu: None,
+			profile_editor: Default::default(),
 		}
 	}
 }
