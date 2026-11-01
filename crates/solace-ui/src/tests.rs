@@ -395,6 +395,91 @@ fn focus_and_full_window_calls_end_when_their_conversation_or_call_does() {
 }
 
 #[test]
+fn going_live_in_a_dm_call_shows_your_screen_and_notices_when_it_stops() {
+	let ctx = egui::Context::default();
+	install(&ctx).unwrap();
+	let mut solace = Solace::default();
+	let mut state = test_support::demo_state();
+	let run = |events: Vec<egui::Event>, solace: &mut Solace, state: &mut client_core::State| {
+		let input = egui::RawInput {
+			screen_rect: Some(Rect::from_min_size(
+				egui::Pos2::ZERO,
+				egui::vec2(1400.0, 900.0),
+			)),
+			events,
+			..Default::default()
+		};
+		let mut output = ctx.run_ui(input, |ui| {
+			let _ = solace.show(ui, state);
+		});
+		output.textures_delta.clear();
+	};
+	let dm = nav::direct(&state)[0].clone();
+	let _ = state.select(dm.id);
+	let me = state.user.as_ref().unwrap().id;
+	state.voice.active = Some(client_core::voice::Call {
+		channel: dm.id,
+		guild: None,
+		connected_at: None,
+		server_muted: false,
+		server_deafened: false,
+		request: 7,
+		phase: client_core::voice::Phase::Connected,
+		muted: false,
+		deafened: false,
+		participants: vec![client_core::voice::Participant {
+			user: me,
+			muted: false,
+			deafened: false,
+			server_muted: false,
+			server_deafened: false,
+			video: false,
+			streaming: false,
+		}],
+		camera: false,
+		watching: None,
+		error: None,
+	});
+
+	// The picker asks the engine for sources and names the call a share would belong to.
+	solace.open_share_picker();
+	run(vec![], &mut solace, &mut state);
+	assert!(
+		solace.media.screen.open,
+		"the engine lists sources while the picker is open"
+	);
+	assert!(solace.media.screen.refresh_requested);
+	assert_eq!(
+		solace.media.screen.context,
+		Some((state.generation, dm.id, 7)),
+		"a share belongs to this call"
+	);
+	run(
+		vec![egui::Event::Key {
+			key: egui::Key::Escape,
+			physical_key: None,
+			pressed: true,
+			repeat: false,
+			modifiers: egui::Modifiers::NONE,
+		}],
+		&mut solace,
+		&mut state,
+	);
+	assert!(!solace.call.popover_open(), "Esc closes the picker");
+	run(vec![], &mut solace, &mut state);
+	assert!(!solace.media.screen.open);
+
+	// Live: your screen gets a tile; a share that stops by itself says why.
+	solace.media.screen.busy = true;
+	run(vec![], &mut solace, &mut state);
+	assert!(solace.toasts.is_empty());
+	solace.media.screen.busy = false;
+	solace.media.screen.status = "Screen-share connection ended";
+	run(vec![], &mut solace, &mut state);
+	assert!(!solace.toasts.is_empty(), "an unexpected stop is noticed");
+}
+
+#[test]
 fn a_jumped_to_message_scrolls_into_view_and_glows() {
 	let ctx = egui::Context::default();
 	install(&ctx).unwrap();

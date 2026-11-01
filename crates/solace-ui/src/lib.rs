@@ -263,6 +263,12 @@ impl Solace {
 		self.call.full = full;
 	}
 
+	/// Open the Go Live picker on the call stage, as its share button does.
+	pub fn open_share_picker(&mut self) {
+		self.call.open_share_picker();
+		self.media.screen.refresh_requested = true;
+	}
+
 	/// Open the settings dialog on a page.
 	pub fn open_settings(&mut self, page: SettingsPage) {
 		self.settings = Some(page);
