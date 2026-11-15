@@ -209,25 +209,30 @@ function hookChunkArray(arr: Chunk[]) {
 
   const ownPush = Object.getOwnPropertyDescriptor(arr, "push");
   let currentPush: (...items: any[]) => number = arr.push;
-  let inPush = false;
-
-  function corrodePush(this: unknown, ...chunks: Chunk[]) {
-    // Webpack's JSONP callback calls the *previous* push (which is us) at its end.
-    if (inPush) return Array.prototype.push.apply(arr, chunks);
-    inPush = true;
-    try {
-      for (const c of chunks) wrapChunk(c);
-      return currentPush.apply(arr, chunks);
-    } finally {
-      inPush = false;
-    }
-  }
+  // Discord loads more than one webpack runtime onto this array (the main app, libdiscore's wasm
+  // loader, ...). Each runtime reads `push`, binds it as its parent and installs its own JSONP
+  // callback, so pushes travel newest runtime -> ... -> oldest -> Array.prototype.push. Hand every
+  // reader a wrapper around the *current* push so that chain stays intact, and only wrap a
+  // chunk's factories once, at the outermost call.
+  let depth = 0;
+  const wrapPush = (fn: (...items: any[]) => number) =>
+    function corrodePush(this: unknown, ...chunks: Chunk[]) {
+      if (depth === 0) for (const c of chunks) wrapChunk(c);
+      depth++;
+      try {
+        return fn.apply(arr, chunks);
+      } finally {
+        depth--;
+      }
+    };
+  let exposed = wrapPush(currentPush);
 
   Object.defineProperty(arr, "push", {
     configurable: true,
-    get: () => corrodePush,
+    get: () => exposed,
     set(v) {
       currentPush = v;
+      exposed = wrapPush(v);
     },
   });
 

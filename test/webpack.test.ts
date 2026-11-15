@@ -57,6 +57,30 @@ describe("webpack (early load)", () => {
   });
 });
 
+describe("webpack with several runtimes", () => {
+  // Discord's page runs more than one webpack runtime on webpackChunkdiscord_app (e.g. the main
+  // app and libdiscore's wasm loader). Every runtime must keep receiving chunks.
+  it("keeps the push chain intact in early mode", () => {
+    webpack.init(win);
+    const main = installRuntime(win);
+    const second = installRuntime(win);
+    loadChunk(win, { 1: function (m: any) { m.exports = { a: 1 }; } }, false);
+    expect(typeof main.m[1]).toBe("function");
+    expect(typeof second.m[1]).toBe("function");
+    expect(main(1).a).toBe(1);
+    expect(webpack.find(webpack.filters.byProps("a"))).toBeTruthy();
+  });
+
+  it("keeps the push chain intact in late mode", () => {
+    const main = installRuntime(win);
+    webpack.init(win);
+    const second = installRuntime(win);
+    loadChunk(win, { 2: function (m: any) { m.exports = { b: 2 }; } }, false);
+    expect(typeof main.m[2]).toBe("function");
+    expect(typeof second.m[2]).toBe("function");
+  });
+});
+
 describe("webpack (late load)", () => {
   it("hooks an already-running runtime and patches modules that haven't executed", () => {
     installRuntime(win);
