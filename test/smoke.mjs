@@ -101,6 +101,19 @@ try {
     await page.keyboard.press("Escape");
     assert(!(await page.$("corrode-settings")), "Escape closes settings");
 
+    // Updates: the startup check announces the update, and the Updates page installs it.
+    const notice = await page.evaluate(() => document.querySelector("corrode-toasts")?.shadowRoot?.textContent ?? "");
+    assert(notice.includes("An update for Corrode is available"), `update toast: ${notice}`);
+    await page.evaluate(() => window.corrode.ui.openSettings("updates"));
+    const upd = page.locator("corrode-settings .card[data-update=corrode]");
+    await upd.locator("text=Update available").waitFor();
+    assert((await page.locator("corrode-settings .card[data-update=client]").textContent()).includes("Up to date"), "client is up to date");
+    await upd.locator("button:has-text('Update Corrode')").click();
+    await upd.locator("text=Restart to finish").waitFor();
+    assert(await upd.locator("button:has-text('Restart now')").count(), "restart button shown");
+    if (process.env.SCREENSHOTS) await page.screenshot({ path: join(root, `test/artifacts/updates-${mode}.png`) });
+    await page.keyboard.press("Escape");
+
     // Shortcut opens it.
     await page.keyboard.press("Control+Shift+KeyO");
     assert(await page.$("corrode-settings"), "shortcut opens settings");

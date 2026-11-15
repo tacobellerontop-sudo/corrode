@@ -95,6 +95,9 @@ Type definition: [`src/native.ts`](../src/native.ts).
 | `relaunch()` | "Restart Discord" buttons (needed after toggling plugins that patch Discord's code). |
 | `openDevTools()` | "Open DevTools" button. |
 | `eject()` | "Uninstall Corrode" button. Corrode calls `corrode.unload()` first, then this. The injector should remove itself from the client and usually relaunch. |
+| `updates.check()` | Optional. Resolves to `{ client, corrode }`, each `{ version?, commit?, latestVersion?, latestCommit?, available, error? }`. When present, Corrode shows an "Updates" page and checks once at startup. |
+| `updates.updateCorrode()` | Optional. Download the latest Corrode build; it takes effect after `relaunch()`. Builds are published at `https://github.com/tacobellerontop-sudo/corrode/releases/download/latest-main/` (`manifest.json` lists the files and their SHA-256). |
+| `updates.updateClient()` | Optional. Download and start the client's own update, or open its download page. |
 
 ## What Corrode exposes back
 

@@ -96,10 +96,10 @@ function boot() {
     plugins,
     themes,
     ui: {
-      openSettings: (tab?: "plugins" | "themes" | "quickcss" | "about") => ui.open(tab),
+      openSettings: (tab?: "plugins" | "themes" | "quickcss" | "updates" | "about") => ui.open(tab),
       closeSettings: () => ui.close(),
       /** Renders one settings tab inside `container`; returns a function that removes it. */
-      mountSettings: (container: HTMLElement, tab: "plugins" | "themes" | "quickcss" | "about") => ui.mount(container, tab),
+      mountSettings: (container: HTMLElement, tab: "plugins" | "themes" | "quickcss" | "updates" | "about") => ui.mount(container, tab),
       toast: showToast,
     },
     /**
@@ -151,6 +151,14 @@ function boot() {
       disposers.push(installEntryPoints(ui));
     });
     await plugins.startAll();
+    // Tell the user when the client reports something newer; never block startup on it.
+    if (native.updates) {
+      void ui.checkForUpdates().then((info) => {
+        if (unloaded || !info) return;
+        const what = [info.corrode.available && "Corrode", info.client.available && (native.name ?? "the client")].filter(Boolean);
+        if (what.length) showToast(`An update for ${what.join(" and ")} is available. Click to see it.`, { title: "Update available", duration: 10000, onClick: () => ui.open("updates") });
+      });
+    }
     logger.info(`Started in ${Math.round(performance.now() - startedAt)}ms (${mode} load)`);
   })().catch((err) => {
     logger.error("Startup failed", err);

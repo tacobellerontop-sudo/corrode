@@ -1,6 +1,6 @@
 import { getLoadMode, getPatches } from "../api/webpack";
 import { getBackend } from "../api/storage";
-import type { CorrodeNative } from "../native";
+import type { CorrodeNative, UpdateInfo, UpdateTarget } from "../native";
 import type { PluginManager } from "../plugins/manager";
 import type { PluginStatus, SettingDefinition } from "../plugins/types";
 import type { ThemeManager } from "../themes";
@@ -17,11 +17,12 @@ export interface SettingsDeps {
   unload(): void;
 }
 
-export type TabId = "plugins" | "themes" | "quickcss" | "about";
+export type TabId = "plugins" | "themes" | "quickcss" | "updates" | "about";
 export const TABS: { id: TabId; label: string }[] = [
   { id: "plugins", label: "Plugins" },
   { id: "themes", label: "Themes" },
   { id: "quickcss", label: "Quick CSS" },
+  { id: "updates", label: "Updates" },
   { id: "about", label: "About" },
 ];
 
@@ -39,8 +40,14 @@ export class SettingsUI {
   private filter = "";
   private lastFocus?: Element | null;
   private embedded = false;
+  private updates: { info?: UpdateInfo; checking?: boolean; busy?: "client" | "corrode"; error?: string; restart?: boolean } = {};
 
   constructor(private deps: SettingsDeps) {}
+
+  /** Tabs available here: "Updates" needs a client that supports update checks. */
+  get tabs() {
+    return TABS.filter((t) => t.id !== "updates" || !!this.deps.native.updates);
+  }
 
   get isOpen() {
     return !!this.host?.isConnected;
@@ -58,7 +65,7 @@ export class SettingsUI {
       "nav",
       { role: "tablist", "aria-orientation": "vertical", "aria-label": "Corrode settings" },
       h("div", { class: "brand" }, h("span", { class: "brand-mark" }), h("div", null, "Corrode", h("br"), h("small", null, `v${this.deps.version}`))),
-      TABS.map((t) =>
+      this.tabs.map((t) =>
         h("button", { class: "tab", role: "tab", "data-tab": t.id, "aria-selected": String(t.id === this.tab), onClick: () => this.switchTab(t.id) }, t.label),
       ),
       h("div", { class: "nav-spacer" }),
@@ -148,7 +155,7 @@ export class SettingsUI {
     const scroll = this.main.scrollTop;
     clear(this.main);
     if (!this.embedded) this.main.appendChild(h("button", { class: "close", "aria-label": "Close", onClick: () => this.close() }, "✕"));
-    const view = { plugins: () => this.renderPlugins(), themes: () => this.renderThemes(), quickcss: () => this.renderQuickCss(), about: () => this.renderAbout() }[this.tab]();
+    const view = { plugins: () => this.renderPlugins(), themes: () => this.renderThemes(), quickcss: () => this.renderQuickCss(), updates: () => this.renderUpdates(), about: () => this.renderAbout() }[this.tab]();
     this.main.appendChild(view);
     this.main.scrollTop = scroll;
     if (focusKey) {
@@ -475,6 +482,99 @@ export class SettingsUI {
       }
     });
     return h("section", null, h("h2", null, "Quick CSS"), h("p", { class: "lede" }, "A scratch stylesheet, applied live and saved automatically."), area);
+  }
+
+  /* -------------------------------- updates -------------------------------- */
+
+  /** Asks the client what is new. Used by the Updates page and once at startup. */
+  async checkForUpdates(): Promise<UpdateInfo | undefined> {
+    const api = this.deps.native.updates;
+    if (!api || this.updates.checking) return this.updates.info;
+    this.updates.checking = true;
+    this.updates.error = undefined;
+    this.renderIf("updates");
+    try {
+      this.updates.info = await api.check();
+    } catch (err) {
+      this.updates.error = String((err as Error)?.message ?? err);
+    }
+    this.updates.checking = false;
+    this.renderIf("updates");
+    return this.updates.info;
+  }
+
+  private renderIf(tab: TabId) {
+    if (this.tab === tab) this.render();
+  }
+
+  private async runUpdate(which: "client" | "corrode") {
+    const api = this.deps.native.updates;
+    const run = which === "client" ? api?.updateClient : api?.updateCorrode;
+    if (!run || this.updates.busy) return;
+    this.updates.busy = which;
+    this.updates.error = undefined;
+    this.renderIf("updates");
+    try {
+      await run.call(api);
+      if (which === "corrode") this.updates.restart = true;
+    } catch (err) {
+      this.updates.error = String((err as Error)?.message ?? err);
+    }
+    this.updates.busy = undefined;
+    this.renderIf("updates");
+  }
+
+  private renderUpdates() {
+    const { native } = this.deps;
+    const u = this.updates;
+    if (!u.info && !u.checking && !u.error) void this.checkForUpdates();
+    const describe = (t?: UpdateTarget) => [t?.version, t?.commit && `(${t.commit})`].filter(Boolean).join(" ") || "Unknown";
+    const card = (which: "client" | "corrode", title: string, canUpdate: boolean, action: string) => {
+      const t = u.info?.[which];
+      const restart = which === "corrode" && u.restart;
+      const status = !t
+        ? h("span", { class: "badge" }, u.checking ? "Checking…" : "Not checked")
+        : t.error
+          ? h("span", { class: "badge err" }, "Check failed")
+          : restart
+            ? h("span", { class: "badge warn" }, "Restart to finish")
+            : t.available
+              ? h("span", { class: "badge warn" }, "Update available")
+              : h("span", { class: "badge" }, "Up to date");
+      return h(
+        "div",
+        { class: "card", "data-update": which },
+        h("div", { class: "card-title" }, title, status),
+        h("div", { class: "card-desc" }, `Installed: ${describe(t)}`),
+        t?.available && h("div", { class: "card-desc" }, `Latest: ${[t.latestVersion, t.latestCommit && `(${t.latestCommit})`].filter(Boolean).join(" ")}`),
+        t?.error && h("div", { class: "card-desc" }, t.error),
+        h(
+          "div",
+          { class: "card-actions" },
+          restart
+            ? native.relaunch && h("button", { class: "btn small", onClick: () => native.relaunch!() }, "Restart now")
+            : t?.available && canUpdate && h("button", { class: "btn small", disabled: !!u.busy, onClick: () => void this.runUpdate(which) }, u.busy === which ? "Downloading…" : action),
+        ),
+      );
+    };
+    return h(
+      "section",
+      null,
+      h("h2", null, "Updates"),
+      h("p", { class: "lede" }, `Updates for ${native.name ?? "the client"} and for Corrode. Corrode checks once each time it starts.`),
+      u.error && h("div", { class: "notice" }, u.error),
+      h(
+        "div",
+        { class: "toolbar" },
+        h("button", { class: "btn secondary", disabled: !!u.checking, onClick: () => void this.checkForUpdates() }, u.checking ? "Checking…" : "Check for updates"),
+      ),
+      h(
+        "div",
+        { class: "cards" },
+        card("corrode", "Corrode", !!native.updates?.updateCorrode, "Update Corrode"),
+        card("client", native.name ?? "Client", !!native.updates?.updateClient, `Update ${native.name ?? "client"}`),
+      ),
+    );
   }
 
   /* -------------------------------- about -------------------------------- */

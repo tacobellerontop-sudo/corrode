@@ -18,7 +18,18 @@
   <!-- Development harness: a fake Discord (webpack runtime + a few modules + a settings sidebar).
        Serve the repo root and open /test/harness/?mode=early or ?mode=late after `npm run build`. -->
   <script>
-    window.CorrodeNative = { name: "Harness", version: "0.0.0", relaunch: () => location.reload() };
+    window.CorrodeNative = {
+      name: "Harness",
+      version: "0.0.0",
+      relaunch: () => location.reload(),
+      updates: {
+        check: async () => ({
+          client: { version: "0.0.0", commit: "aaaaaaa", available: false },
+          corrode: { version: "0.1.0", commit: "bbbbbbb", latestVersion: "0.1.0", latestCommit: "ccccccc", available: !window.__corrodeUpdated },
+        }),
+        updateCorrode: async () => void (window.__corrodeUpdated = true),
+      },
+    };
     if (new URLSearchParams(location.search).get("mode") !== "late") {
       document.write('<script src="/dist/corrode.js"><\/script>');
     }

@@ -29,6 +29,34 @@ export interface CorrodeNative {
   openDevTools?(): void;
   /** Remove Corrode from the client (the injector's ejector). Corrode unloads itself first. */
   eject?(): void | Promise<void>;
+  /**
+   * Update checks, for clients that can update themselves and/or the Corrode build they load.
+   * When present, Corrode shows an "Updates" page and checks once at startup.
+   */
+  updates?: {
+    check(): Promise<UpdateInfo>;
+    /** Download the latest Corrode build. It takes effect after `relaunch()`. */
+    updateCorrode?(): Promise<void>;
+    /** Download and start the client's own update (or open its download page). */
+    updateClient?(): Promise<void>;
+  };
+}
+
+export interface UpdateTarget {
+  /** What is running now. */
+  version?: string;
+  commit?: string;
+  /** What is published. */
+  latestVersion?: string;
+  latestCommit?: string;
+  available: boolean;
+  /** Set when the check for this target failed. */
+  error?: string;
+}
+
+export interface UpdateInfo {
+  client: UpdateTarget;
+  corrode: UpdateTarget;
 }
 
 export const NATIVE_GLOBAL = "CorrodeNative";

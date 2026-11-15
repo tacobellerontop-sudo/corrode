@@ -47,3 +47,32 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --generate-notes
+
+  # Every build of main is published as the rolling "latest-main" release, which is where
+  # clients download Corrode updates from (manifest.json + corrode.min.js).
+  publish-main:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: publish-main
+      cancel-in-progress: true
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: corrode-dist
+          path: dist
+      - name: Publish latest-main
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view latest-main --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload latest-main dist/corrode.min.js dist/corrode.js --clobber --repo "$GITHUB_REPOSITORY"
+            # The manifest goes last: it is what clients read first, and it names the files above.
+            gh release upload latest-main dist/manifest.json --clobber --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create latest-main dist/* --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+              --prerelease --title "Corrode (latest main)" --notes "Rolling build of main. Clients download Corrode updates from here."
+          fi

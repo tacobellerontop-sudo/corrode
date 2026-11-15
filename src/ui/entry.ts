@@ -86,6 +86,7 @@ const ICONS: Record<TabId, string[]> = {
   plugins: ["M12 2 3 7v10l9 5 9-5V7z", "M12 22V12M3 7l9 5 9-5"],
   themes: ["M12 3a9 9 0 1 0 0 18c1.5 0 2-1 2-2s-.5-2 1-2h2a4 4 0 0 0 4-4c0-4.4-4-8-9-8z", "M7.5 12h.01M9.5 7.5h.01M14.5 7.5h.01"],
   quickcss: ["m8 7-5 5 5 5", "m16 7 5 5-5 5", "m13.5 4-3 16"],
+  updates: ["M12 3v12", "m7 10 5 5 5-5", "M5 21h14"],
   about: ["M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z", "M12 11v5M12 8h.01"],
 };
 
@@ -110,7 +111,7 @@ function buildSection(ui: SettingsUI) {
   const base = { usePredicate: () => true };
   let items: any[];
   if (typeof React?.useRef === "function" && typeof React.useEffect === "function") {
-    items = TABS.map(({ id, label }) => {
+    items = (ui.tabs ?? TABS).map(({ id, label }) => {
       const Page = () => {
         const ref = React.useRef(null);
         React.useEffect(() => (ref.current ? ui.mount(ref.current, id) : undefined), []);

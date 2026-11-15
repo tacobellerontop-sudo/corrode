@@ -76,7 +76,7 @@ describe("settings sidebar entry", () => {
     loadChunk(win, fakeReact);
     loadChunk(win, settingsRoot);
     const unmount = vi.fn();
-    const ui = { open: vi.fn(), toggle: vi.fn(), mount: vi.fn(() => unmount) } as any;
+    const ui = { open: vi.fn(), toggle: vi.fn(), mount: vi.fn(() => unmount), tabs: ["Plugins", "Themes", "Quick CSS", "About"].map((label) => ({ id: label.toLowerCase().replace(" ", ""), label })) } as any;
     const dispose = entry.installEntryPoints(ui);
     const section = webpack.find((m: any) => m?.key === "$Root").buildLayout()[2];
     expect(section.type).toBe(1);
