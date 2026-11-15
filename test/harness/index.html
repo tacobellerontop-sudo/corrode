@@ -1,0 +1,57 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Corrode harness</title>
+  <style>
+    :root { --background-primary:#313338; --background-secondary:#2b2d31; }
+    body { margin:0; background:#313338; color:#dbdee1; font-family: system-ui, sans-serif; }
+    .app { display:flex; height:100vh; }
+    nav.sidebar_x { width:220px; background:#2b2d31; padding:16px 8px; }
+    .header_x { font-size:12px; font-weight:700; text-transform:uppercase; color:#949ba4; padding:6px 10px; }
+    .item_x { padding:6px 10px; border-radius:4px; color:#b5bac1; cursor:pointer; }
+    .item_x:hover { background:#35373c; }
+    .selected_x { background:#404249; color:#fff; }
+    .separator_x { height:1px; background:#3f4147; margin:8px 10px; }
+    main { padding:24px; }
+  </style>
+  <!-- Development harness: a fake Discord (webpack runtime + a few modules + a settings sidebar).
+       Serve the repo root and open /test/harness/?mode=early or ?mode=late after `npm run build`. -->
+  <script>
+    window.CorrodeNative = { name: "Harness", version: "0.0.0", relaunch: () => location.reload() };
+    if (new URLSearchParams(location.search).get("mode") !== "late") {
+      document.write('<script src="/dist/corrode.js"><\/script>');
+    }
+  </script>
+</head>
+<body>
+  <div class="app">
+    <nav class="sidebar_x" aria-label="User settings">
+      <div role="tablist" class="side_x">
+        <div class="header_x">User Settings</div>
+        <div role="tab" class="item_x selected_x" aria-selected="true">My Account</div>
+        <div role="tab" class="item_x" aria-selected="false">Profiles</div>
+        <div role="tab" class="item_x" aria-selected="false">Privacy &amp; Safety</div>
+        <div role="tab" class="item_x" aria-selected="false">Devices</div>
+        <div class="separator_x"></div>
+        <div class="header_x">App Settings</div>
+        <div role="tab" class="item_x" aria-selected="false">Appearance</div>
+        <div role="tab" class="item_x" aria-selected="false">Accessibility</div>
+        <div role="tab" class="item_x" aria-selected="false">Voice &amp; Video</div>
+        <div role="tab" class="item_x" aria-selected="false">Notifications</div>
+      </div>
+    </nav>
+    <main><h1>Fake Discord</h1><p>Press Ctrl+Shift+O to open Corrode settings.</p></main>
+  </div>
+  <script type="module">
+    import { installRuntime, coreModules, loadChunk } from "./fake-discord.js";
+    installRuntime(window);
+    loadChunk(window, coreModules);
+    if (new URLSearchParams(location.search).get("mode") === "late") {
+      const s = document.createElement("script");
+      s.src = "/dist/corrode.js";
+      document.head.appendChild(s);
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,23 @@
+{
+  "name": "corrode",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Corrode: a client mod for Discord. Builds a single injectable bundle with a plugin loader, plugin API and settings UI.",
+  "license": "UNLICENSED",
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "watch": "node scripts/build.mjs --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "smoke": "node test/smoke.mjs",
+    "check": "npm run typecheck && npm test && npm run build && npm run smoke"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "esbuild": "^0.28.2",
+    "jsdom": "^31.0.1",
+    "typescript": "^5.9.3",
+    "vitest": "^5.1.0"
+  }
+}
