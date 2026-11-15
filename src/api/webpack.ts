@@ -64,7 +64,11 @@ export interface RegisteredPatch extends ModulePatch {
 export type LoadMode = "early" | "late" | "uninitialised";
 
 let mode: LoadMode = "uninitialised";
-let wreq: WebpackRequire | undefined;
+/**
+ * Every webpack runtime seen on the page. Discord runs more than one (the main app, libdiscore's
+ * wasm loader, ...), each with its own module cache, so lookups search all of them.
+ */
+const requires = new Set<WebpackRequire>();
 const patches: RegisteredPatch[] = [];
 const listeners = new Set<{ filter: Filter; cb: (exp: any, id: PropertyKey) => void }>();
 const WRAPPED = Symbol.for("corrode.webpack.wrapped");
@@ -89,7 +93,7 @@ function matchesFind(code: string, find: ModulePatch["find"]): boolean {
 export function addPatch(patch: ModulePatch, owner: string, selfExpr: string): RegisteredPatch {
   const reg: RegisteredPatch = { ...patch, owner, applied: false, appliedTo: new Set(), selfExpr };
   patches.push(reg);
-  if (wreq) patchPendingFactories();
+  if (requires.size) patchPendingFactories();
   return reg;
 }
 
@@ -161,7 +165,7 @@ function wrapFactory(id: PropertyKey, factory: ModuleFactory): ModuleFactory {
   const original: ModuleFactory = (factory as any)[WRAPPED] ?? factory;
   const impl = applySourcePatches(id, original);
   const wrapped = function (this: any, module: any, exports: any, require: WebpackRequire) {
-    if (!wreq && typeof require === "function" && require.m) wreq = require;
+    if (typeof require === "function" && require.m && !requires.has(require)) requires.add(require);
     const res = impl.call(this, module, exports, require);
     notify(module?.exports, id);
     return res;
@@ -189,10 +193,11 @@ function wrapChunk(chunk: Chunk) {
 
 /** Late mode: wrap/patch factories that are registered but haven't executed yet. */
 function patchPendingFactories() {
-  if (!wreq) return;
-  for (const id of Object.keys(wreq.m)) {
-    if (wreq.c[id]) continue;
-    wreq.m[id] = wrapFactory(id, wreq.m[id]);
+  for (const r of requires) {
+    for (const id of Object.keys(r.m)) {
+      if (r.c?.[id]) continue;
+      r.m[id] = wrapFactory(id, r.m[id]);
+    }
   }
 }
 
@@ -243,6 +248,48 @@ function hookChunkArray(arr: Chunk[]) {
   });
 }
 
+/** Looks like webpack's `__webpack_require__` (minified or not). */
+function isWebpackRequire(fn: unknown): fn is WebpackRequire {
+  if (typeof fn !== "function") return false;
+  try {
+    const src = Function.prototype.toString.call(fn);
+    return /exports\s*:\s*\{\s*\}/.test(src) || src.includes("__webpack_modules__");
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Early mode: catch every webpack runtime as it starts. A runtime assigns its module table with
+ * `__webpack_require__.m = __webpack_modules__`; trapping that assignment on Function.prototype
+ * lets us wrap the modules bundled into the runtime's own script. Those never pass through the
+ * chunk array, and they include core modules such as Flux.
+ */
+function hookRuntimeCreation(win: any) {
+  const proto = win.Function?.prototype ?? Function.prototype;
+  if (Object.getOwnPropertyDescriptor(proto, "m")) return;
+  Object.defineProperty(proto, "m", {
+    configurable: true,
+    enumerable: false,
+    set(this: any, modules: any) {
+      Object.defineProperty(this, "m", { value: modules, configurable: true, writable: true, enumerable: true });
+      try {
+        if (modules && typeof modules === "object" && isWebpackRequire(this)) {
+          requires.add(this);
+          for (const id of Object.keys(modules)) modules[id] = wrapFactory(id, modules[id]);
+          log.debug(`Hooked a webpack runtime with ${Object.keys(modules).length} modules`);
+        }
+      } catch (err) {
+        log.error("Failed to hook a webpack runtime", err);
+      }
+    },
+  });
+  restoreHooks.push(() => {
+    const d = Object.getOwnPropertyDescriptor(proto, "m");
+    if (d?.set) delete (proto as any).m;
+  });
+}
+
 /**
  * Hooks Discord's webpack. Call once, as early as possible. Returns the detected load mode.
  */
@@ -273,6 +320,7 @@ export function init(win: any = globalThis): LoadMode {
       const d = Object.getOwnPropertyDescriptor(win, CHUNK_GLOBAL);
       if (d?.set) delete win[CHUNK_GLOBAL];
     });
+    hookRuntimeCreation(win);
     log.info("Loaded early: waiting for Discord's webpack");
   }
   return mode;
@@ -291,23 +339,36 @@ export function teardown() {
   listeners.clear();
   patches.length = 0;
   mode = "uninitialised";
-  wreq = undefined;
+  requires.clear();
 }
 
-/** Returns webpack's `__webpack_require__`, if Discord's runtime is up. */
-export function getRequire(win: any = globalThis): WebpackRequire | undefined {
-  if (wreq) return wreq;
+/** Every webpack runtime found so far (probing the chunk array for any not seen yet). */
+function allRequires(win: any = globalThis): WebpackRequire[] {
   const chunks = win[CHUNK_GLOBAL];
-  if (!Array.isArray(chunks)) return undefined;
-  try {
-    chunks.push([[Symbol("corrode")], {}, (r: WebpackRequire) => void (wreq = r)]);
-    chunks.pop();
-  } catch (err) {
-    log.warn("Could not obtain webpack require", err);
+  if (Array.isArray(chunks)) {
+    try {
+      // Each runtime on the array runs a chunk's runtime callback with its own require.
+      chunks.push([[Symbol("corrode")], {}, (r: WebpackRequire) => void (r && r.m && requires.add(r))]);
+      chunks.pop();
+    } catch (err) {
+      log.warn("Could not obtain webpack require", err);
+    }
   }
-  // Only accept it if the runtime actually ran our callback.
-  const r = wreq as WebpackRequire | undefined;
-  return r && r.m ? r : (wreq = undefined);
+  return [...requires].filter((r) => r && r.m);
+}
+
+/** Returns Discord's main `__webpack_require__` (the runtime with the most modules), if it is up. */
+export function getRequire(win: any = globalThis): WebpackRequire | undefined {
+  let best: WebpackRequire | undefined;
+  let bestSize = -1;
+  for (const r of allRequires(win)) {
+    const size = Object.keys(r.m).length;
+    if (size > bestSize) {
+      best = r;
+      bestSize = size;
+    }
+  }
+  return best;
 }
 
 /* ------------------------------------------------------------------ */
@@ -385,10 +446,9 @@ export interface FindOptions {
 export function find(filter: Filter): any;
 export function find(filter: Filter, opts: { all: true }): any[];
 export function find(filter: Filter, opts: FindOptions = {}): any {
-  const req = getRequire();
   const found: any[] = [];
-  if (!req) return opts.all ? found : undefined;
-  for (const mod of Object.values(req.c)) {
+  const caches = allRequires().map((r) => r.c).filter(Boolean);
+  for (const mod of caches.flatMap((c) => Object.values(c))) {
     if (!mod) continue;
     for (const c of candidates(mod.exports)) {
       if (test(filter, c)) {

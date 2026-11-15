@@ -2,8 +2,9 @@
 // unit tests and the browser smoke test. It mirrors the real JSONP chunk-loading behaviour,
 // including webpack replacing `push` on the chunk array.
 
-export function installRuntime(win = globalThis) {
-  const modules = {};
+/** `bundled` are modules shipped inside the runtime script itself; they never pass through the chunk array. */
+export function installRuntime(win = globalThis, bundled = {}) {
+  const modules = { ...bundled };
   const cache = {};
   function wreq(id) {
     if (cache[id]) return cache[id].exports;

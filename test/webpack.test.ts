@@ -57,6 +57,28 @@ describe("webpack (early load)", () => {
   });
 });
 
+describe("webpack with modules bundled in the runtime", () => {
+  // Discord ships core modules (including the Flux dispatcher) inside its runtime script, so they
+  // are registered via `__webpack_require__.m = __webpack_modules__` and never pushed as a chunk.
+  it("finds and patches runtime-bundled modules in early mode", async () => {
+    webpack.init(win);
+    win.corrode = { plugins: { getDefinition: () => ({ suffix: "!!" }) } };
+    webpack.addPatch(
+      { find: '"Hello, "', replacement: { match: /return\s*"Hello, "\s*\+\s*(\w+)\s*\+\s*"!"/, replace: 'return "Hey, "+$1+$self.suffix' } },
+      "test",
+      "globalThis.corrode.plugins.getDefinition('test')",
+    );
+    const waiting = webpack.waitFor(webpack.filters.byProps("dispatch", "subscribe"));
+    const wreq = installRuntime(win, coreModules);
+    for (const id of Object.keys(coreModules)) wreq(id);
+    expect(typeof (await waiting).dispatch).toBe("function");
+    expect(webpack.findStore("UserStore")).toBeTruthy();
+    expect(webpack.find(webpack.filters.byProps("greet")).greet("Ada")).toBe("Hey, Ada!!");
+    expect(webpack.getRequire(win)).toBe(wreq);
+    delete win.corrode;
+  });
+});
+
 describe("webpack with several runtimes", () => {
   // Discord's page runs more than one webpack runtime on webpackChunkdiscord_app (e.g. the main
   // app and libdiscore's wasm loader). Every runtime must keep receiving chunks.
