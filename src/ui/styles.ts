@@ -89,6 +89,11 @@ textarea { width: 100%; resize: vertical; font-family: var(--font-code, ui-monos
 .kv dt { color: var(--muted); } .kv dd { margin: 0; color: var(--text); overflow-wrap: anywhere; }
 code { font-family: var(--font-code, ui-monospace, Consolas, monospace); background: var(--bg3); padding: 1px 4px; border-radius: 3px; font-size: 13px; }
 .notice { padding: 10px 12px; border-radius: 6px; background: rgba(240,178,50,.1); border: 1px solid rgba(240,178,50,.35); margin-bottom: 14px; }
+/* Embedded in Discord's own settings page: no window chrome, Discord shows the page title. */
+:host { display: block; }
+.backdrop.embedded { position: static; display: block; background: none; animation: none; z-index: auto; }
+.embedded main { padding: 0; overflow: visible; }
+.embedded h2 { display: none; }
 @media (max-width: 640px) {
   .modal { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
   nav { flex-direction: row; overflow-x: auto; padding: 10px; }

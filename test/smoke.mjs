@@ -71,6 +71,18 @@ try {
     const toast = await page.evaluate(() => document.querySelector("corrode-toasts")?.shadowRoot?.textContent ?? "");
     assert(toast.includes("deploy is done"), `toast shown: ${toast}`);
 
+    // A settings tab can be embedded in a container (used for the pages inside Discord's settings).
+    const embedded = await page.evaluate(() => {
+      const box = document.body.appendChild(document.createElement("div"));
+      const remove = window.corrode.ui.mountSettings(box, "plugins");
+      const root = box.querySelector("corrode-settings").shadowRoot;
+      const out = { cards: root.querySelectorAll(".card").length, close: !!root.querySelector(".close"), nav: !!root.querySelector("nav") };
+      remove();
+      box.remove();
+      return { ...out, removed: !document.querySelector("corrode-settings") };
+    });
+    assert(embedded.cards === 4 && !embedded.close && !embedded.nav && embedded.removed, `embedded settings: ${JSON.stringify(embedded)}`);
+
     // Sidebar entry injected into the fake settings sidebar, and it opens the window.
     await page.waitForSelector("[data-corrode-entry][role=tab]");
     await page.click("[data-corrode-entry][role=tab]");

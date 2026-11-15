@@ -17,15 +17,19 @@ export interface SettingsDeps {
   unload(): void;
 }
 
-type TabId = "plugins" | "themes" | "quickcss" | "about";
-const TABS: { id: TabId; label: string }[] = [
+export type TabId = "plugins" | "themes" | "quickcss" | "about";
+export const TABS: { id: TabId; label: string }[] = [
   { id: "plugins", label: "Plugins" },
   { id: "themes", label: "Themes" },
   { id: "quickcss", label: "Quick CSS" },
   { id: "about", label: "About" },
 ];
 
-/** The Corrode settings window: a modal rendered in a shadow root, independent of Discord's React. */
+/**
+ * Corrode's settings views, rendered in a shadow root, independent of Discord's React.
+ * They are shown either embedded in a container (`mount`, used for the pages inside Discord's
+ * User Settings) or as a standalone modal window (`open`, the fallback and keyboard shortcut).
+ */
 export class SettingsUI {
   private host?: HTMLElement;
   private main?: HTMLElement;
@@ -34,6 +38,7 @@ export class SettingsUI {
   private expanded = new Set<string>();
   private filter = "";
   private lastFocus?: Element | null;
+  private embedded = false;
 
   constructor(private deps: SettingsDeps) {}
 
@@ -86,7 +91,35 @@ export class SettingsUI {
     (root.querySelector(`[data-tab="${this.tab}"]`) as HTMLElement | null)?.focus();
   }
 
+  /**
+   * Renders one tab inside `container` (no window chrome). Only one view exists at a time:
+   * mounting closes whatever was showing before. Returns a function that removes it.
+   */
+  mount(container: HTMLElement, tab: TabId): () => void {
+    this.close();
+    this.tab = tab;
+    this.embedded = true;
+    this.lastFocus = null;
+    const host = (this.host = document.createElement("corrode-settings"));
+    const root = host.attachShadow({ mode: "open" });
+    this.main = h("main", null);
+    const wrap = h("div", { class: "backdrop embedded" }, this.main);
+    root.append(h("style", null, SETTINGS_CSS), wrap);
+    // Keep Discord's key handlers from reacting while typing; Escape still closes Discord's settings.
+    for (const type of ["keydown", "keypress", "keyup"] as const) {
+      wrap.addEventListener(type, (e) => e.key !== "Escape" && e.stopPropagation());
+    }
+    container.appendChild(host);
+    this.cleanups.push(this.deps.plugins.subscribe(() => this.tab === "plugins" && this.render()));
+    this.cleanups.push(this.deps.themes.subscribe(() => this.tab === "themes" && this.render()));
+    this.render();
+    return () => {
+      if (this.host === host) this.close();
+    };
+  }
+
   close() {
+    this.embedded = false;
     for (const c of this.cleanups.splice(0)) c();
     this.host?.remove();
     this.host = undefined;
@@ -114,7 +147,7 @@ export class SettingsUI {
     const focusKey = active?.dataset?.key;
     const scroll = this.main.scrollTop;
     clear(this.main);
-    this.main.appendChild(h("button", { class: "close", "aria-label": "Close", onClick: () => this.close() }, "✕"));
+    if (!this.embedded) this.main.appendChild(h("button", { class: "close", "aria-label": "Close", onClick: () => this.close() }, "✕"));
     const view = { plugins: () => this.renderPlugins(), themes: () => this.renderThemes(), quickcss: () => this.renderQuickCss(), about: () => this.renderAbout() }[this.tab]();
     this.main.appendChild(view);
     this.main.scrollTop = scroll;

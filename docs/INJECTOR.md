@@ -107,6 +107,7 @@ Type definition: [`src/native.ts`](../src/native.ts).
 | `ready` | Promise that resolves once plugins have started. |
 | `unload()` | Stops every plugin and removes everything Corrode added: function patches, Flux hooks, styles, UI, listeners, the webpack hooks and the `window.corrode` global. Source patches that already ran stay until the page reloads, so an ejector should reload or relaunch after uninstalling. |
 | `ui.openSettings(tab?)` | Open the settings window (`"plugins" | "themes" | "quickcss" | "about"`). |
+| `ui.mountSettings(container, tab)` | Render one settings tab inside `container`; returns a function that removes it. |
 
 Loading the bundle twice is harmless: the second copy sees `window.corrode`, logs a warning and exits.
 

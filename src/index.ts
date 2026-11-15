@@ -98,6 +98,8 @@ function boot() {
     ui: {
       openSettings: (tab?: "plugins" | "themes" | "quickcss" | "about") => ui.open(tab),
       closeSettings: () => ui.close(),
+      /** Renders one settings tab inside `container`; returns a function that removes it. */
+      mountSettings: (container: HTMLElement, tab: "plugins" | "themes" | "quickcss" | "about") => ui.mount(container, tab),
       toast: showToast,
     },
     /**

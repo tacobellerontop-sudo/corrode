@@ -16,6 +16,20 @@ const settingsRoot = {
   },
 };
 
+/** Just enough of React for the layout nodes: effects run when the test flushes them. */
+const effects: (() => any)[] = [];
+const fakeReact = {
+  901: function (module: any) {
+    module.exports = {
+      useState: (v: any) => [v, () => {}],
+      useEffect: (fn: () => any) => void effects.push(fn),
+      useRef: (v: any) => ({ current: v }),
+      createElement: (type: any, props: any, ...children: any[]) => ({ type, props, children }),
+      Fragment: Symbol("Fragment"),
+    };
+  },
+};
+
 describe("settings sidebar entry", () => {
   let webpack: typeof import("../src/api/webpack");
   let entry: typeof import("../src/ui/entry");
@@ -56,5 +70,33 @@ describe("settings sidebar entry", () => {
 
     dispose();
     expect(keys(root.buildLayout())).toEqual(["user_section", "games_and_apps_section", "utility_section"]);
+  });
+
+  it("adds one page per tab inside Discord's settings when React is available", () => {
+    loadChunk(win, fakeReact);
+    loadChunk(win, settingsRoot);
+    const unmount = vi.fn();
+    const ui = { open: vi.fn(), toggle: vi.fn(), mount: vi.fn(() => unmount) } as any;
+    const dispose = entry.installEntryPoints(ui);
+    const section = webpack.find((m: any) => m?.key === "$Root").buildLayout()[2];
+    expect(section.type).toBe(1);
+    const items = section.buildLayout();
+    expect(items.map((i: any) => i.useTitle())).toEqual(["Plugins", "Themes", "Quick CSS", "About"]);
+    expect(items.every((i: any) => i.type === 2 && i.onClick === undefined)).toBe(true);
+
+    const [panel] = items[1].buildLayout();
+    const [category] = panel.buildLayout();
+    const [custom] = category.buildLayout();
+    expect([panel.type, category.type, custom.type]).toEqual([3, 5, 19]);
+
+    // Render the page the way React would: run the component, attach the ref, flush effects.
+    effects.length = 0;
+    const el = custom.Component();
+    const container = document.createElement("div");
+    el.props.ref.current = container;
+    const cleanup = effects[0]();
+    expect(ui.mount).toHaveBeenCalledWith(container, "themes");
+    expect(cleanup).toBe(unmount);
+    dispose();
   });
 });

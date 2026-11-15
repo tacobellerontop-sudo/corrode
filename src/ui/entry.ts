@@ -2,12 +2,13 @@ import { common } from "../api/common";
 import { createLogger } from "../api/logger";
 import { after } from "../api/patcher";
 import { find, filters, onModule } from "../api/webpack";
-import type { SettingsUI } from "./settings";
+import { TABS, type SettingsUI, type TabId } from "./settings";
 
 /**
  * Ways into the settings window:
  *  - Keyboard shortcut Ctrl/Cmd + Shift + O (always available).
- *  - A "Corrode" section in Discord's User Settings sidebar. Discord builds that sidebar from a
+ *  - A "Corrode" section in Discord's User Settings sidebar, whose items (Plugins, Themes, Quick
+ *    CSS, About) are pages inside Discord's own settings pane. Discord builds that sidebar from a
  *    layout tree whose root has the key "$Root"; we add our section to what its `buildLayout()`
  *    returns (the approach BetterDiscord takes; Vencord and Shelter add the same kind of nodes).
  *  - For Discord builds that still use the old tab-list sidebar, a DOM-based fallback that clones
@@ -78,44 +79,88 @@ function inject(list: HTMLElement, open: () => void) {
 }
 
 /** Node types of Discord's settings layout tree; the real values are read from Discord when found. */
-const FALLBACK_TYPES = { SECTION: 1, SIDEBAR_ITEM: 2 };
+const FALLBACK_TYPES = { SECTION: 1, SIDEBAR_ITEM: 2, PANEL: 3, CATEGORY: 5, CUSTOM: 19 };
 const SECTION_KEY = "corrode_section";
 
-function icon() {
+const ICONS: Record<TabId, string[]> = {
+  plugins: ["M12 2 3 7v10l9 5 9-5V7z", "M12 22V12M3 7l9 5 9-5"],
+  themes: ["M12 3a9 9 0 1 0 0 18c1.5 0 2-1 2-2s-.5-2 1-2h2a4 4 0 0 0 4-4c0-4.4-4-8-9-8z", "M7.5 12h.01M9.5 7.5h.01M14.5 7.5h.01"],
+  quickcss: ["m8 7-5 5 5 5", "m16 7 5 5-5 5", "m13.5 4-3 16"],
+  about: ["M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z", "M12 11v5M12 8h.01"],
+};
+
+function icon(tab: TabId) {
   const React = common.React;
   if (!React) return null;
   return React.createElement(
     "svg",
     { width: 20, height: 20, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round" },
-    React.createElement("path", { d: "M12 2 3 7v10l9 5 9-5V7z" }),
-    React.createElement("path", { d: "M12 22V12M3 7l9 5 9-5" }),
+    ...ICONS[tab].map((d, i) => React.createElement("path", { key: i, d })),
   );
 }
 
-function buildSection(open: () => void) {
-  const types = find(filters.byProps("SECTION", "SIDEBAR_ITEM", "PANEL")) ?? FALLBACK_TYPES;
-  const item = {
-    key: "corrode_settings",
-    type: types.SIDEBAR_ITEM,
-    useTitle: () => "Corrode Settings",
-    useSearchTerms: () => ["corrode", "plugins", "themes", "quick css"],
-    usePredicate: () => true,
-    icon,
-    // An item with onClick has no panel of its own: it opens Corrode's window instead.
-    buildLayout: () => [],
-    onClick: open,
-  };
-  return {
-    key: SECTION_KEY,
-    type: types.SECTION,
-    useTitle: () => "Corrode",
-    usePredicate: () => true,
-    buildLayout: () => [item],
-  };
+/**
+ * Builds the "Corrode" section: one sidebar item per tab, each with a page that hosts the
+ * matching Corrode view inside Discord's own settings pane (the node shapes Vencord uses).
+ * Without React there is nothing to host a page in, so a single item opens the window instead.
+ */
+function buildSection(ui: SettingsUI) {
+  const types = { ...FALLBACK_TYPES, ...find(filters.byProps("SECTION", "SIDEBAR_ITEM", "PANEL")) };
+  const React = common.React;
+  const base = { usePredicate: () => true };
+  let items: any[];
+  if (typeof React?.useRef === "function" && typeof React.useEffect === "function") {
+    items = TABS.map(({ id, label }) => {
+      const Page = () => {
+        const ref = React.useRef(null);
+        React.useEffect(() => (ref.current ? ui.mount(ref.current, id) : undefined), []);
+        return React.createElement("div", { ref, "data-corrode-page": id });
+      };
+      const key = `corrode_${id}`;
+      const panel = {
+        ...base,
+        key: `${key}_panel`,
+        type: types.PANEL,
+        useTitle: () => label,
+        buildLayout: () => [
+          {
+            ...base,
+            key: `${key}_category`,
+            type: types.CATEGORY,
+            buildLayout: () => [{ ...base, key: `${key}_custom`, type: types.CUSTOM, Component: Page, useSearchTerms: () => ["corrode", label] }],
+          },
+        ],
+      };
+      return {
+        ...base,
+        key,
+        type: types.SIDEBAR_ITEM,
+        useTitle: () => label,
+        useSearchTerms: () => ["corrode", label],
+        icon: () => icon(id),
+        buildLayout: () => [panel],
+      };
+    });
+  } else {
+    items = [
+      {
+        ...base,
+        key: "corrode_settings",
+        type: types.SIDEBAR_ITEM,
+        useTitle: () => "Corrode Settings",
+        useSearchTerms: () => ["corrode"],
+        icon: () => null,
+        // An item with onClick has no page of its own.
+        buildLayout: () => [],
+        onClick: () => ui.open(),
+      },
+    ];
+  }
+  return { ...base, key: SECTION_KEY, type: types.SECTION, useTitle: () => "Corrode", buildLayout: () => items };
 }
 
 /** Adds the Corrode section to Discord's settings layout tree, now or when that module loads. */
-function installLayoutEntry(open: () => void): () => void {
+function installLayoutEntry(ui: SettingsUI): () => void {
   const isRoot = (m: any) => m?.key === "$Root" && typeof m.buildLayout === "function";
   const unpatches: (() => void)[] = [];
   const seen = new WeakSet<object>();
@@ -131,7 +176,7 @@ function installLayoutEntry(open: () => void): () => void {
             if (!Array.isArray(layout) || layout.some((s) => s?.key === SECTION_KEY)) return;
             const games = layout.findIndex((s) => s?.key === "games_and_apps_section");
             const result = [...layout];
-            result.splice(games === -1 ? result.length : games + 1, 0, buildSection(open));
+            result.splice(games === -1 ? result.length : games + 1, 0, buildSection(ui));
             return result;
           },
           "corrode-ui",
@@ -159,7 +204,7 @@ export function installEntryPoints(ui: SettingsUI): () => void {
   };
   window.addEventListener("keydown", onKey, true);
 
-  const removeLayoutEntry = installLayoutEntry(() => ui.open());
+  const removeLayoutEntry = installLayoutEntry(ui);
 
   let scheduled = false;
   const observer = new MutationObserver(() => {
