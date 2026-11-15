@@ -77,9 +77,64 @@ export const coreModules = {
       getCurrentUser() {
         return { id: "1", username: "me" };
       }
+      getUser(id) {
+        return { 1: { id: "1", username: "me" }, 2: { id: "2", username: "ana", globalName: "Ana" }, 3: { id: "3", username: "helper", bot: true } }[id];
+      }
     }
     UserStore.displayName = "UserStore";
     require.d(exports, { default: () => new UserStore() });
+  },
+  // Message actions
+  500: function (module, exports, require) {
+    const sent = [];
+    const MessageActions = {
+      sent,
+      sendMessage(channelId, message) {
+        sent.push({ channelId, content: message.content });
+        return Promise.resolve({ ok: true });
+      },
+      editMessage(channelId, messageId, message) {
+        sent.push({ channelId, messageId, content: message.content });
+        return Promise.resolve({ ok: true });
+      },
+      startEditMessage(channelId, messageId, content) {
+        MessageActions.editing = { channelId, messageId, content };
+      },
+    };
+    require.d(exports, { Z: () => MessageActions });
+  },
+  // More stores: users 1 (me), 2 (ana, a friend), 3 (a bot); DM channel 9 and #general (10) in guild 50.
+  600: function (module, exports, require) {
+    const users = {
+      1: { id: "1", username: "me" },
+      2: { id: "2", username: "ana", globalName: "Ana" },
+      3: { id: "3", username: "helper", bot: true },
+    };
+    const channels = { 9: { id: "9", type: 1, recipients: ["2"] }, 10: { id: "10", type: 0, name: "general", guild_id: "50" } };
+    const messages = {
+      "9:100": { id: "100", channel_id: "9", author: users[2], content: "hello [x](https://example.org)", mentions: [] },
+      "10:101": { id: "101", channel_id: "10", author: users[1], content: "mine", mentions: [] },
+      "10:102": { id: "102", channel_id: "10", author: users[3], content: "beep", mentions: [] },
+      "10:103": { id: "103", channel_id: "10", author: users[2], content: "hey <@1>", mentions: ["1"], mentioned: true },
+    };
+    const make = (name, methods) => {
+      const Store = class {
+        getName() {
+          return name;
+        }
+        addChangeListener() {}
+      };
+      Store.displayName = name;
+      return Object.assign(new Store(), methods);
+    };
+    require.d(exports, {
+      a: () => make("ChannelStore", { getChannel: (id) => channels[id] }),
+      b: () => make("MessageStore", { getMessage: (c, id) => messages[`${c}:${id}`] }),
+      c: () => make("RelationshipStore", { isFriend: (id) => id === "2", isBlocked: () => false, isIgnored: () => false, getNickname: () => undefined }),
+      d: () => make("PresenceStore", { getStatus: () => "offline" }),
+      e: () => make("SelectedChannelStore", { getChannelId: () => "10", getVoiceChannelId: () => "77" }),
+      f: () => make("GuildStore", { getGuild: (id) => (id === "50" ? { id: "50", name: "Test Server" } : undefined) }),
+    });
   },
   // A module that source patches target
   400: function (module, exports, require) {

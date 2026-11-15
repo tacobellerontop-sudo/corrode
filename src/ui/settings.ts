@@ -17,6 +17,8 @@ export interface SettingsDeps {
   unload(): void;
 }
 
+const PLUGIN_GUIDE_URL = "https://github.com/tacobellerontop-sudo/corrode/blob/main/docs/PLUGINS.md";
+
 export type TabId = "plugins" | "themes" | "quickcss" | "updates" | "about";
 export const TABS: { id: TabId; label: string }[] = [
   { id: "plugins", label: "Plugins" },
@@ -38,6 +40,9 @@ export class SettingsUI {
   private cleanups: (() => void)[] = [];
   private expanded = new Set<string>();
   private filter = "";
+  private category = "";
+  private pasteOpen = false;
+  private pasteDraft = "";
   private lastFocus?: Element | null;
   private embedded = false;
   private updates: { info?: UpdateInfo; checking?: boolean; busy?: "client" | "corrode"; error?: string; restart?: boolean } = {};
@@ -177,7 +182,12 @@ export class SettingsUI {
     const { plugins } = this.deps;
     const all = plugins.list();
     const q = this.filter.toLowerCase();
-    const shown = all.filter((p) => !q || `${p.definition.name} ${p.definition.description ?? ""} ${p.id}`.toLowerCase().includes(q));
+    const categories = [...new Set(all.map((p) => p.definition.category).filter((c): c is string => !!c))].sort();
+    if (all.some((p) => p.source === "external")) categories.push("Installed by me");
+    if (this.category && this.category !== "Enabled" && !categories.includes(this.category)) this.category = "";
+    const inCategory = (p: PluginStatus) =>
+      !this.category || (this.category === "Enabled" ? p.enabled : this.category === "Installed by me" ? p.source === "external" : p.definition.category === this.category);
+    const shown = all.filter((p) => inCategory(p) && (!q || `${p.definition.name} ${p.definition.description ?? ""} ${p.id}`.toLowerCase().includes(q)));
     const restart = all.some((p) => p.restartPending);
 
     const urlInput = h("input", { type: "url", placeholder: "Install plugin from URL (https://…/plugin.js)", "aria-label": "Plugin URL" });
@@ -193,6 +203,39 @@ export class SettingsUI {
       }
     };
     urlInput.addEventListener("keydown", (e) => e.key === "Enter" && install());
+
+    // Custom plugins can also be pasted in as code (see docs/PLUGINS.md).
+    const installPasted = async () => {
+      const source = this.pasteDraft.trim();
+      if (!source) return;
+      try {
+        const id = await plugins.installFromSource(source);
+        await plugins.enable(id);
+        this.pasteDraft = "";
+        this.pasteOpen = false;
+        showToast(`Installed ${plugins.getDefinition(id)?.name ?? id}`, { kind: "success" });
+      } catch (err) {
+        showToast(String((err as Error).message ?? err), { kind: "error", title: "That plugin didn't load" });
+      }
+      this.render();
+    };
+    const paste =
+      this.pasteOpen &&
+      h(
+        "div",
+        { class: "card", "data-paste": "" },
+        h("div", { class: "card-desc" }, "Paste a plugin's code. It runs with full access to Discord and your account, so only paste code you trust."),
+        h("textarea", {
+          rows: 10,
+          spellcheck: "false",
+          "aria-label": "Plugin code",
+          "data-key": "plugin-paste",
+          placeholder: 'module.exports = corrode.definePlugin({\n  id: "myPlugin",\n  name: "My Plugin",\n  start(ctx) { ctx.toast("Hello!"); },\n});',
+          value: this.pasteDraft,
+          onInput: (e: Event) => (this.pasteDraft = (e.target as HTMLTextAreaElement).value),
+        }),
+        h("div", { class: "card-actions" }, h("button", { class: "btn small", onClick: installPasted }, "Install pasted plugin")),
+      );
 
     return h(
       "section",
@@ -214,8 +257,41 @@ export class SettingsUI {
             this.render();
           },
         }),
+        h(
+          "select",
+          {
+            "aria-label": "Show",
+            "data-key": "plugin-category",
+            onChange: (e: Event) => {
+              this.category = (e.target as HTMLSelectElement).value;
+              this.render();
+            },
+          },
+          [["", `All (${all.length})`], ["Enabled", `Enabled (${all.filter((p) => p.enabled).length})`], ...categories.map((c) => [c, c])].map(([value, label]) =>
+            h("option", { value, selected: value === this.category }, label),
+          ),
+        ),
       ),
-      h("div", { class: "toolbar" }, urlInput, h("button", { class: "btn", onClick: install }, "Install")),
+      h(
+        "div",
+        { class: "toolbar" },
+        urlInput,
+        h("button", { class: "btn", onClick: install }, "Install"),
+        h(
+          "button",
+          {
+            class: "btn secondary",
+            "aria-expanded": String(this.pasteOpen),
+            onClick: () => {
+              this.pasteOpen = !this.pasteOpen;
+              this.render();
+            },
+          },
+          "Paste code",
+        ),
+        h("button", { class: "btn secondary", onClick: () => window.open(PLUGIN_GUIDE_URL, "_blank", "noopener") }, "How to make a plugin"),
+      ),
+      paste,
       shown.length ? h("div", { class: "cards" }, shown.map((p) => this.pluginCard(p))) : h("div", { class: "empty" }, "No plugins match your search."),
     );
   }

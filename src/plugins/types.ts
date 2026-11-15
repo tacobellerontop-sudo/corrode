@@ -66,6 +66,8 @@ export interface PluginDefinition<S extends SettingsSchema = SettingsSchema> {
   description?: string;
   authors?: string[];
   version?: string;
+  /** Groups the plugin in the Plugins page, e.g. "Appearance". */
+  category?: string;
   /** Enabled on first run. Default false. */
   enabledByDefault?: boolean;
   /** Can't be disabled from the UI. */

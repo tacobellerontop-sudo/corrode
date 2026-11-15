@@ -52,7 +52,22 @@
         <div role="tab" class="item_x" aria-selected="false">Notifications</div>
       </div>
     </nav>
-    <main><h1>Fake Discord</h1><p>Press Ctrl+Shift+O to open Corrode settings.</p></main>
+    <main class="chatContent_x">
+      <h1>Fake Discord</h1><p>Press Ctrl+Shift+O to open Corrode settings.</p>
+      <!-- A few chat rows shaped like Discord's, for the page plugins. -->
+      <ol data-list-id="chat-messages">
+        <li id="chat-messages-10-101" class="messageListItem_x"><div class="message_x cozy_x groupStart_x">
+          <h3><span id="message-username-101" class="username_x">me</span> <span class="timestamp_x"><time datetime="2026-01-05T09:03:07.000Z"><i class="separator_x"> — </i>9:03 AM</time></span></h3>
+          <div id="message-content-101" class="markup_x messageContent_x">mine</div></div></li>
+        <li id="chat-messages-10-102" class="messageListItem_x"><div class="message_x cozy_x groupStart_x">
+          <h3><span id="message-username-102" class="username_x">helper</span> <span class="timestamp_x"><time datetime="2026-01-05T09:04:00.000Z">9:04 AM</time></span></h3>
+          <div id="message-content-102" class="markup_x messageContent_x">beep <a href="https://dlscord-gift.com/claim">https://discord.com/gift</a></div></div></li>
+        <li id="chat-messages-10-103" class="messageListItem_x"><div class="message_x cozy_x groupStart_x mentioned_x">
+          <h3><span id="message-username-103" class="username_x">ana</span> <span class="timestamp_x"><time datetime="2026-01-05T09:05:00.000Z">9:05 AM</time></span></h3>
+          <div id="message-content-103" class="markup_x messageContent_x">hey @me <video src="data:video/mp4;base64,"></video></div></div></li>
+      </ol>
+      <form><div class="channelTextArea_x"><div role="textbox" contenteditable="true" data-slate-editor="true"></div></div></form>
+    </main>
   </div>
   <script type="module">
     import { installRuntime, coreModules, loadChunk } from "./fake-discord.js";

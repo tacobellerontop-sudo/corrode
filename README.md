@@ -32,15 +32,13 @@ modules and a settings sidebar. To try it in Discord without an injector, paste
 
 ## Built-in plugins
 
-| Plugin | Shows off |
-| --- | --- |
-| **Silent Typing** | Finding a webpack module and patching a function |
-| **Keyword Notify** | Flux subscriptions, settings and toasts |
-| **Hide Typing Indicators** | Flux interception (blocking actions) |
-| **Hide Clutter** | Settings-driven CSS injection |
+Corrode ships with 200 plugins in five groups: appearance, sending, notices and filters, chat and
+media, and tools and privacy. All are off until you turn them on in **User Settings > Corrode >
+Plugins**. [docs/BUILTIN_PLUGINS.md](docs/BUILTIN_PLUGINS.md) lists every one.
 
-All are off by default. [docs/PLUGINS.md](docs/PLUGINS.md) covers writing your own, and
-[examples/hello-world.plugin.js](examples/hello-world.plugin.js) is an installable external plugin.
+To make your own, read [docs/PLUGINS.md](docs/PLUGINS.md): it walks through writing a plugin and
+adding it to Corrode by pasting its code or installing it from a link.
+[examples/hello-world.plugin.js](examples/hello-world.plugin.js) is a complete installable example.
 
 ## Layout
 
