@@ -32,9 +32,42 @@ jobs:
           name: corrode-dist
           path: dist/
 
+  # The Corrode Installer (installer/): puts Corrode into the official Discord app. Cross-compiled
+  # for Windows, macOS and Linux, then tested against a fake Discord running in real Electron.
+  installer:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+          cache-dependency-path: installer/go.mod
+      - uses: actions/download-artifact@v4
+        with:
+          name: corrode-dist
+          path: dist
+      - run: go vet ./... && go test ./...
+        working-directory: installer
+      - run: node scripts/build-installer.mjs
+      - name: Test against a fake Discord
+        run: |
+          sudo apt-get install -y xvfb >/dev/null
+          npm install --no-save --no-package-lock electron@33 @electron/asar@3
+          node test/installer-e2e.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: corrode-installer
+          path: |
+            dist/installer/
+            dist/installer.json
+
   release:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: build
+    needs: [build, installer]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -43,16 +76,20 @@ jobs:
         with:
           name: corrode-dist
           path: dist
+      - uses: actions/download-artifact@v4
+        with:
+          name: corrode-installer
+          path: dist
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --generate-notes
+        run: gh release create "$GITHUB_REF_NAME" dist/*.* dist/installer/* --repo "$GITHUB_REPOSITORY" --generate-notes
 
   # Every build of main is published as the rolling "latest-main" release, which is where
   # clients download Corrode updates from (manifest.json + corrode.min.js).
   publish-main:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: build
+    needs: [build, installer]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -64,15 +101,30 @@ jobs:
         with:
           name: corrode-dist
           path: dist
+      - uses: actions/download-artifact@v4
+        with:
+          name: corrode-installer
+          path: dist
       - name: Publish latest-main
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          cat > notes.md <<EOF
+          Rolling build of main (${GITHUB_SHA::7}). Clients download Corrode updates from here.
+
+          **Corrode for the official Discord app:** download the installer for your system and run it.
+          - Windows: \`CorrodeInstaller.exe\` (\`CorrodeInstaller-arm64.exe\` on ARM)
+          - macOS: \`CorrodeInstaller-macos-arm64\` (Apple Silicon) or \`CorrodeInstaller-macos-x64\` (Intel)
+          - Linux: \`CorrodeInstaller-linux-x64\` / \`CorrodeInstaller-linux-arm64\`
+
+          See [docs/INSTALLER.md](https://github.com/${GITHUB_REPOSITORY}/blob/main/docs/INSTALLER.md).
+          EOF
           if gh release view latest-main --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release upload latest-main dist/corrode.min.js dist/corrode.js --clobber --repo "$GITHUB_REPOSITORY"
+            gh release upload latest-main dist/corrode.min.js dist/corrode.js dist/installer/* dist/installer.json --clobber --repo "$GITHUB_REPOSITORY"
             # The manifest goes last: it is what clients read first, and it names the files above.
             gh release upload latest-main dist/manifest.json --clobber --repo "$GITHUB_REPOSITORY"
+            gh release edit latest-main --notes-file notes.md --repo "$GITHUB_REPOSITORY"
           else
-            gh release create latest-main dist/* --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
-              --prerelease --title "Corrode (latest main)" --notes "Rolling build of main. Clients download Corrode updates from here."
+            gh release create latest-main dist/*.* dist/installer/* --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+              --prerelease --title "Corrode (latest main)" --notes-file notes.md
           fi

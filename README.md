@@ -13,8 +13,15 @@ builds **one injectable script** (`dist/corrode.min.js`) containing:
   <kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>Shift</kbd> + <kbd>O</kbd>,
 - a few example plugins.
 
-Getting the script into Discord (the client/injector and its ejector) lives in a separate
-repository. The contract between the two is in **[docs/INJECTOR.md](docs/INJECTOR.md)**.
+## Getting it into Discord
+
+- **Official Discord app**: run the **Corrode Installer** from the
+  [latest-main release](https://github.com/tacobellerontop-sudo/corrode/releases/tag/latest-main)
+  (Windows, macOS, Linux). It installs, repairs and uninstalls Corrode in Discord Stable, PTB and
+  Canary. See **[docs/INSTALLER.md](docs/INSTALLER.md)**.
+- **AesDc**: LX's own Discord client, which loads Corrode by itself.
+
+Anything else that loads Corrode follows the contract in **[docs/INJECTOR.md](docs/INJECTOR.md)**.
 
 ## Build
 
@@ -54,8 +61,12 @@ src/
   themes.ts           themes (saved, themes folder, background layer) and Quick CSS
   themeCreator.ts     the theme creator's colours, presets and CSS output
   ui/                 settings window, sidebar entry and shortcut, toasts
+installer/            Corrode Installer for the official Discord app (Go), and runtime/:
+                      the patcher and preload it puts into Discord
 scripts/build.mjs     esbuild build + manifest
-test/                 unit tests (vitest + jsdom), fake Discord harness, browser smoke test
+scripts/build-installer.mjs  builds the installer for every system
+test/                 unit tests (vitest + jsdom), fake Discord harness, browser smoke test,
+                      installer end-to-end test (real Electron + a fake Discord app)
 docs/                 injector contract, plugin guide
 ```
 

@@ -2,3 +2,5 @@ node_modules/
 dist/
 test/artifacts/
 *.log
+installer/payload/*
+!installer/payload/README.txt

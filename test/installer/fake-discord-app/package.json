@@ -1,0 +1,5 @@
+{
+  "name": "discord",
+  "main": "app_bootstrap/index.js",
+  "private": true
+}

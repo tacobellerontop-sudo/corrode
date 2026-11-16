@@ -11,7 +11,9 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "smoke": "node test/smoke.mjs",
-    "check": "npm run typecheck && npm test && npm run build && npm run smoke"
+    "check": "npm run typecheck && npm test && npm run build && npm run smoke",
+    "build:installer": "node scripts/build-installer.mjs",
+    "test:installer": "node test/installer-e2e.mjs"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",

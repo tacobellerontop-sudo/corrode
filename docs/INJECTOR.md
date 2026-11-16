@@ -1,8 +1,10 @@
 # Injector contract
 
-Corrode itself never touches the Discord installation. A separate client/injector (with its
-ejector) is responsible for getting `corrode.js` into Discord's renderer. This document is
-everything that injector needs to know.
+The Corrode bundle itself never touches the Discord installation: an injector gets `corrode.js`
+into Discord's renderer. There are two today, AesDc (LX's own client) and the Corrode Installer
+for the official Discord app ([INSTALLER.md](INSTALLER.md), [`installer/runtime`](../installer/runtime)
+is a complete Electron implementation of everything below). This document is everything an
+injector needs to know.
 
 **Injector API version: 1** (also in the bundle banner and `manifest.json`). It only changes when
 something below changes incompatibly.
