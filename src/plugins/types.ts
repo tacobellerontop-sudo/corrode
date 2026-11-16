@@ -66,7 +66,11 @@ export interface PluginDefinition<S extends SettingsSchema = SettingsSchema> {
   description?: string;
   authors?: string[];
   version?: string;
-  /** Groups the plugin in the Plugins page, e.g. "Appearance". */
+  /**
+   * The group the Plugins page shows the plugin in. Use one of: Appearance, Declutter, Quality of
+   * Life, Chat, Media, Writing and Sending, Notifications, Filters and Muting, Privacy and Safety,
+   * Utilities. Other names get a group of their own; without one it goes under "Installed by me".
+   */
   category?: string;
   /** Enabled on first run. Default false. */
   enabledByDefault?: boolean;

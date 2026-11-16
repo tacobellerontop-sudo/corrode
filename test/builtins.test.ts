@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { builtinPlugins } from "../src/builtins";
+import { PLUGIN_CATEGORIES, PLUGIN_CATEGORY } from "../src/builtins/categories";
 import { matchesCombo, parseCombo, mapPlainText, snowflakeDate } from "../src/builtins/lib/helpers";
 import * as send from "../src/builtins/sending";
 import { findScamHost, isTrackingUrl, parseReminder, suspiciousHost } from "../src/builtins/utility";
@@ -23,6 +24,15 @@ describe("built-in plugin list", () => {
         if (def.type === "select") expect(def.options.some((o: any) => o.value === def.default), `${p.id}.${key}`).toBe(true);
       }
     }
+  });
+
+  it("puts every built-in plugin in exactly one group", () => {
+    const names = PLUGIN_CATEGORIES.map((c) => c.name as string);
+    for (const p of builtinPlugins) {
+      expect(PLUGIN_CATEGORY[p.id], p.id).toBeTruthy();
+      expect(names, p.id).toContain(p.category);
+    }
+    expect(Object.keys(PLUGIN_CATEGORY).sort()).toEqual(builtinPlugins.map((p) => p.id).sort());
   });
 
   it("builds valid CSS from default settings, and survives hostile setting values", () => {

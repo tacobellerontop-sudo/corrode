@@ -3,6 +3,7 @@ import { getBackend } from "../api/storage";
 import type { CorrodeNative, UpdateInfo, UpdateTarget } from "../native";
 import type { PluginManager } from "../plugins/manager";
 import type { PluginStatus, SettingDefinition } from "../plugins/types";
+import { PLUGIN_CATEGORIES } from "../builtins/categories";
 import type { ThemeManager } from "../themes";
 import { clear, h, toggle } from "./dom";
 import { SETTINGS_CSS } from "./styles";
@@ -41,6 +42,7 @@ export class SettingsUI {
   private expanded = new Set<string>();
   private filter = "";
   private category = "";
+  private collapsed = new Set<string>();
   private pasteOpen = false;
   private pasteDraft = "";
   private lastFocus?: Element | null;
@@ -182,13 +184,76 @@ export class SettingsUI {
     const { plugins } = this.deps;
     const all = plugins.list();
     const q = this.filter.toLowerCase();
-    const categories = [...new Set(all.map((p) => p.definition.category).filter((c): c is string => !!c))].sort();
-    if (all.some((p) => p.source === "external")) categories.push("Installed by me");
-    if (this.category && this.category !== "Enabled" && !categories.includes(this.category)) this.category = "";
+    const MINE = "Installed by me";
+    // Groups by what plugins do (builtins/categories.ts), then any other group a user plugin names.
+    const groupOf = (p: PluginStatus) => p.definition.category || (p.source === "external" ? MINE : "Other");
+    const known: string[] = PLUGIN_CATEGORIES.map((c) => c.name);
+    const groups = [...known, ...[...new Set(all.map(groupOf))].filter((g) => !known.includes(g)).sort((a, b) => (a === MINE ? 1 : b === MINE ? -1 : a.localeCompare(b)))].filter((g) =>
+      all.some((p) => groupOf(p) === g),
+    );
+    const hasMine = all.some((p) => p.source === "external");
+    if (this.category && this.category !== "Enabled" && this.category !== MINE && !groups.includes(this.category)) this.category = "";
+    if (this.category === MINE && !hasMine) this.category = "";
     const inCategory = (p: PluginStatus) =>
-      !this.category || (this.category === "Enabled" ? p.enabled : this.category === "Installed by me" ? p.source === "external" : p.definition.category === this.category);
-    const shown = all.filter((p) => inCategory(p) && (!q || `${p.definition.name} ${p.definition.description ?? ""} ${p.id}`.toLowerCase().includes(q)));
+      !this.category || (this.category === "Enabled" ? p.enabled : this.category === MINE ? p.source === "external" : groupOf(p) === this.category);
+    const shown = all.filter((p) => inCategory(p) && (!q || `${p.definition.name} ${p.definition.description ?? ""} ${p.id} ${groupOf(p)}`.toLowerCase().includes(q)));
     const restart = all.some((p) => p.restartPending);
+
+    const chip = (value: string, label: string, count: number) =>
+      h(
+        "button",
+        {
+          class: "chip",
+          type: "button",
+          "aria-pressed": String(this.category === value),
+          "data-category": value,
+          onClick: () => {
+            this.category = value;
+            this.render();
+          },
+        },
+        label,
+        h("span", { class: "chip-count" }, String(count)),
+      );
+    const chips = h(
+      "div",
+      { class: "chips", role: "group", "aria-label": "Plugin groups" },
+      chip("", "All", all.length),
+      chip("Enabled", "Enabled", all.filter((p) => p.enabled).length),
+      groups.map((g) => chip(g, g, all.filter((p) => groupOf(p) === g).length)),
+      hasMine && !groups.includes(MINE) && chip(MINE, MINE, all.filter((p) => p.source === "external").length),
+    );
+
+    const blurb = (g: string) => PLUGIN_CATEGORIES.find((c) => c.name === g)?.description;
+    const sections = groups
+      .map((g) => {
+        const items = shown.filter((p) => groupOf(p) === g).sort((a, b) => a.definition.name.localeCompare(b.definition.name));
+        if (!items.length) return null;
+        const collapsed = this.collapsed.has(g) && !q;
+        return h(
+          "div",
+          { class: "group", "data-group": g },
+          h(
+            "button",
+            {
+              class: "group-head",
+              type: "button",
+              "aria-expanded": String(!collapsed),
+              onClick: () => {
+                if (this.collapsed.has(g)) this.collapsed.delete(g);
+                else this.collapsed.add(g);
+                this.render();
+              },
+            },
+            h("span", { class: "group-caret" }, collapsed ? "▸" : "▾"),
+            h("span", { class: "group-name" }, g),
+            h("span", { class: "group-count" }, `${items.filter((p) => p.enabled).length}/${items.length} on`),
+            blurb(g) && h("span", { class: "group-blurb" }, blurb(g)),
+          ),
+          !collapsed && h("div", { class: "cards" }, items.map((p) => this.pluginCard(p))),
+        );
+      })
+      .filter(Boolean);
 
     const urlInput = h("input", { type: "url", placeholder: "Install plugin from URL (https://…/plugin.js)", "aria-label": "Plugin URL" });
     const install = async () => {
@@ -257,21 +322,8 @@ export class SettingsUI {
             this.render();
           },
         }),
-        h(
-          "select",
-          {
-            "aria-label": "Show",
-            "data-key": "plugin-category",
-            onChange: (e: Event) => {
-              this.category = (e.target as HTMLSelectElement).value;
-              this.render();
-            },
-          },
-          [["", `All (${all.length})`], ["Enabled", `Enabled (${all.filter((p) => p.enabled).length})`], ...categories.map((c) => [c, c])].map(([value, label]) =>
-            h("option", { value, selected: value === this.category }, label),
-          ),
-        ),
       ),
+      chips,
       h(
         "div",
         { class: "toolbar" },
@@ -292,7 +344,7 @@ export class SettingsUI {
         h("button", { class: "btn secondary", onClick: () => window.open(PLUGIN_GUIDE_URL, "_blank", "noopener") }, "How to make a plugin"),
       ),
       paste,
-      shown.length ? h("div", { class: "cards" }, shown.map((p) => this.pluginCard(p))) : h("div", { class: "empty" }, "No plugins match your search."),
+      sections.length ? h("div", { class: "groups" }, sections) : h("div", { class: "empty" }, "No plugins match your search."),
     );
   }
 

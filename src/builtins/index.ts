@@ -8,24 +8,25 @@ import { sendingPlugins } from "./sending";
 import silentTyping from "./silentTyping";
 import { utilityPlugins } from "./utility";
 import type { PluginDefinition } from "../plugins/types";
+import { PLUGIN_CATEGORY } from "./categories";
 
 /**
  * Every built-in plugin. All are off until the user turns them on.
  *
- * - appearance.ts: stylesheets (hiding things, layout, colours, text)
- * - sending.ts:    changes to what you send
- * - events.ts:     notices and filters driven by Discord's event stream
- * - page.ts:       additions to the page (timestamps, message rows, links, media, message box)
- * - utility.ts:    shortcuts, sounds, reminders and privacy
+ * The files group plugins by how they work (appearance.ts: stylesheets, sending.ts: changes to
+ * what you send, events.ts: Discord's event stream, page.ts: additions to the page, utility.ts:
+ * shortcuts and tools). The Plugins page groups them by what they do instead: see categories.ts.
  */
-const group = (category: string, plugins: PluginDefinition<any>[]) => plugins.map((p) => ({ category, ...p }));
-
-export const builtinPlugins: PluginDefinition<any>[] = [
-  ...group("Notices and filters", [keywordNotify, hideTyping]),
-  ...group("Sending", [silentTyping]),
-  ...group("Appearance", [hideClutter, ...appearancePlugins]),
-  ...group("Sending", sendingPlugins),
-  ...group("Notices and filters", eventPlugins),
-  ...group("Chat and media", pagePlugins),
-  ...group("Tools and privacy", utilityPlugins),
+const all: PluginDefinition<any>[] = [
+  keywordNotify,
+  hideTyping,
+  silentTyping,
+  hideClutter,
+  ...appearancePlugins,
+  ...sendingPlugins,
+  ...eventPlugins,
+  ...pagePlugins,
+  ...utilityPlugins,
 ];
+
+export const builtinPlugins: PluginDefinition<any>[] = all.map((p) => ({ ...p, category: PLUGIN_CATEGORY[p.id] ?? "Utilities" }));

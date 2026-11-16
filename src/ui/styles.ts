@@ -88,6 +88,19 @@ textarea { width: 100%; resize: vertical; font-family: var(--font-code, ui-monos
 .kv { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; }
 .kv dt { color: var(--muted); } .kv dd { margin: 0; color: var(--text); overflow-wrap: anywhere; }
 code { font-family: var(--font-code, ui-monospace, Consolas, monospace); background: var(--bg3); padding: 1px 4px; border-radius: 3px; font-size: 13px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
+.chip { all: unset; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; background: var(--bg2); border: 1px solid var(--border); color: var(--text); font-size: 13px; font-weight: 500; }
+.chip:hover { border-color: var(--muted); }
+.chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+.chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.chip-count { font-size: 11px; opacity: .75; }
+.groups { display: grid; gap: 18px; }
+.group-head { all: unset; cursor: pointer; display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 8px; width: 100%; margin-bottom: 8px; }
+.group-head:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.group-caret { color: var(--muted); width: 12px; }
+.group-name { font-size: 16px; font-weight: 700; color: var(--header); }
+.group-count { font-size: 12px; color: var(--muted); }
+.group-blurb { flex-basis: 100%; padding-left: 20px; color: var(--muted); font-size: 13px; }
 .notice { padding: 10px 12px; border-radius: 6px; background: rgba(240,178,50,.1); border: 1px solid rgba(240,178,50,.35); margin-bottom: 14px; }
 /* Embedded in Discord's own settings page: no window chrome, Discord shows the page title. */
 :host { display: block; }
