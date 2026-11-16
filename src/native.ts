@@ -40,6 +40,28 @@ export interface CorrodeNative {
     /** Download and start the client's own update (or open its download page). */
     updateClient?(): Promise<void>;
   };
+  /**
+   * A themes folder on disk. When present, `.css` files in it show up on the Themes page and the
+   * theme creator saves there. Paths are bare file names; media paths look like `media/<name>`.
+   */
+  themes?: {
+    list(): Promise<{ dir?: string; files: ThemeFileInfo[] }>;
+    read(file: string): Promise<string>;
+    write(file: string, css: string): Promise<void>;
+    delete(file: string): Promise<void>;
+    openFolder?(): Promise<void>;
+    /** Saves a background picture or video into the folder; resolves to its path (`media/<name>`). */
+    writeMedia?(name: string, data: Blob | ArrayBuffer | Uint8Array): Promise<string>;
+    /** Reads a file saved with `writeMedia`. */
+    readMedia?(path: string): Promise<ArrayBuffer>;
+  };
+}
+
+export interface ThemeFileInfo {
+  file: string;
+  /** Last modified, in ms since 1970. A change makes Corrode read the file again. */
+  modified: number;
+  size?: number;
 }
 
 export interface UpdateTarget {

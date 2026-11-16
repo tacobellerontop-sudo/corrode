@@ -6,7 +6,9 @@ builds **one injectable script** (`dist/corrode.min.js`) containing:
 - a **plugin loader** for built-in plugins and external plugins installed from a URL,
 - a **plugin API**: webpack module finding, function patching, source patching, Flux
   subscriptions and interceptors, persistent settings storage, CSS injection, toasts,
-- **themes** (CSS from a URL) and live **Quick CSS**,
+- **themes**: `.css` files from the client's themes folder or a URL, a **theme creator** that
+  makes a theme from colours you pick (with an optional background picture or video, no code
+  needed), and live **Quick CSS**,
 - a **settings window**, opened from a "Corrode" entry in Discord's User Settings or with
   <kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>Shift</kbd> + <kbd>O</kbd>,
 - a few example plugins.
@@ -48,8 +50,9 @@ src/
   native.ts           optional bridge the injector can expose (window.CorrodeNative)
   api/                webpack, patcher, flux, storage, css, common modules, logger
   plugins/            plugin types and manager (lifecycle, settings, external plugins)
-  builtins/           built-in plugins
-  themes.ts           themes and Quick CSS
+  builtins/           built-in plugins (categories.ts: the groups on the Plugins page)
+  themes.ts           themes (saved, themes folder, background layer) and Quick CSS
+  themeCreator.ts     the theme creator's colours, presets and CSS output
   ui/                 settings window, sidebar entry and shortcut, toasts
 scripts/build.mjs     esbuild build + manifest
 test/                 unit tests (vitest + jsdom), fake Discord harness, browser smoke test

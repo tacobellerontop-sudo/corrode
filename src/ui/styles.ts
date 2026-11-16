@@ -102,6 +102,77 @@ code { font-family: var(--font-code, ui-monospace, Consolas, monospace); backgro
 .group-count { font-size: 12px; color: var(--muted); }
 .group-blurb { flex-basis: 100%; padding-left: 20px; color: var(--muted); font-size: 13px; }
 .notice { padding: 10px 12px; border-radius: 6px; background: rgba(240,178,50,.1); border: 1px solid rgba(240,178,50,.35); margin-bottom: 14px; }
+/* Themes page */
+.create-card { display: flex; align-items: center; gap: 14px; padding: 14px 16px; margin-bottom: 8px; border-radius: 8px; border: 1px solid var(--border);
+  background: linear-gradient(120deg, rgba(210,105,47,.18), rgba(88,101,242,.12)), var(--bg2); }
+.create-art { display: grid; grid-template-columns: 1fr 1fr; gap: 3px; flex: none; }
+.create-art span { width: 14px; height: 14px; border-radius: 4px; }
+.hint { color: var(--muted); font-size: 13px; }
+p.hint { margin: 0 0 10px; }
+code.path { user-select: all; overflow-wrap: anywhere; }
+/* Theme creator */
+.creator-top { display: flex; align-items: center; gap: 12px; margin-bottom: 6px; }
+.creator-top .creator-title { margin: 0; display: block; }
+.creator-layout { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 20px; align-items: start; }
+.creator-side { position: sticky; top: 0; display: grid; gap: 10px; }
+.creator-preview-label { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); font-weight: 700; }
+.creator-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.creator-controls { display: grid; gap: 12px; min-width: 0; }
+.creator-controls h3 { margin: 10px 0 4px; }
+.creator-group { display: grid; gap: 6px; }
+.color-row { display: flex; align-items: center; gap: 10px; padding: 6px 8px; border-radius: 6px; background: var(--bg2); }
+.color-text { flex: 1; min-width: 0; }
+.color-label { color: var(--header); font-weight: 600; }
+input[type=color] { flex: none; width: 40px; height: 30px; padding: 0; border: 1px solid var(--border); border-radius: 6px; background: none; cursor: pointer; }
+input[type=color]::-webkit-color-swatch-wrapper { padding: 2px; }
+input[type=color]::-webkit-color-swatch { border: none; border-radius: 4px; }
+input.hex { width: 84px; flex: none; font-family: var(--font-code, ui-monospace, Consolas, monospace); font-size: 13px; padding: 5px 8px; }
+input[type=range] { width: 100%; accent-color: var(--accent); }
+.slider-value { color: var(--muted); font-weight: 500; }
+.chip.preset { gap: 8px; }
+.swatches { display: inline-flex; }
+.swatches span { width: 10px; height: 14px; }
+.swatches span:first-child { border-radius: 3px 0 0 3px; } .swatches span:last-child { border-radius: 0 3px 3px 0; }
+.check { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+.check input { accent-color: var(--accent); width: 16px; height: 16px; }
+.bg-settings { display: grid; gap: 10px; padding: 10px; border-radius: 8px; background: var(--bg2); }
+.bg-current { overflow-wrap: anywhere; }
+.danger-text { color: #ff8a8d; }
+/* The creator's preview: a small Discord drawn with the picked colours. */
+.mock { position: relative; display: grid; grid-template-columns: 34px 92px 1fr; height: 260px; border-radius: 8px; overflow: hidden; font-size: 10px; line-height: 1.3;
+  font-family: var(--m-font); border: 1px solid var(--border); isolation: isolate; background: #000; }
+.m-bg { position: absolute; inset: 0; z-index: -1; background-position: center; background-size: cover; }
+.m-bg video { width: 100%; height: 100%; object-fit: cover; display: block; }
+.m-servers { background: var(--m-serverList); display: flex; flex-direction: column; align-items: center; gap: 5px; padding-top: 6px; }
+.m-icon { width: 22px; height: 22px; border-radius: 50%; background: var(--m-channelList); }
+.m-icon.accent { background: var(--m-accent); border-radius: 7px; }
+.m-sep { width: 14px; height: 1px; background: var(--m-borders); }
+.m-channels { background: var(--m-channelList); display: flex; flex-direction: column; color: var(--m-channels); min-width: 0; }
+.m-guild { color: var(--m-headers); font-weight: 700; padding: 7px 7px; border-bottom: 1px solid var(--m-borders); }
+.m-cat { font-size: 8px; font-weight: 700; padding: 8px 7px 2px; color: var(--m-channels); }
+.m-ch { margin: 1px 4px; padding: 3px 4px; border-radius: 3px; white-space: nowrap; overflow: hidden; }
+.m-ch.selected { background: var(--m-selected); color: var(--m-channelsActive); }
+.m-ch.hover { background: var(--m-hover); color: var(--m-channelsActive); }
+.m-user { margin-top: auto; display: flex; gap: 4px; align-items: center; padding: 5px; background: var(--m-userPanel); }
+.m-chat { position: relative; background: var(--m-chat); display: flex; flex-direction: column; min-width: 0; color: var(--m-text); }
+.m-head { color: var(--m-headers); font-weight: 700; padding: 7px 8px; border-bottom: 1px solid var(--m-borders); }
+.m-msgs { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; gap: 2px; padding: 4px 0; overflow: hidden; }
+.m-msg { display: flex; gap: 6px; padding: 3px 8px; }
+.m-msg.hover { background: var(--m-hover); }
+.m-msg.mentioned { background: var(--m-mention-bg); box-shadow: inset 2px 0 0 var(--m-mention); }
+.m-avatar { width: 18px; height: 18px; border-radius: 50%; flex: none; background: var(--m-accent); }
+.m-avatar.small { width: 14px; height: 14px; }
+.m-name { color: var(--m-headers); font-weight: 600; margin-right: 4px; }
+.m-time { color: var(--m-muted); font-size: 8px; }
+.m-link { color: var(--m-links); }
+.m-mention { color: var(--m-accent); background: color-mix(in srgb, var(--m-accent) 25%, transparent); border-radius: 3px; padding: 0 2px; }
+.m-box { margin: 0 8px 8px; padding: 6px 8px; border-radius: 6px; background: var(--m-messageBox); color: var(--m-muted); }
+.m-menu { position: absolute; right: 10px; top: 30px; width: 84px; padding: 4px; border-radius: 5px; background: var(--m-menus); color: var(--m-text); box-shadow: 0 4px 12px rgba(0,0,0,.35); display: grid; gap: 1px; }
+.m-menu > div { padding: 3px 5px; border-radius: 3px; }
+.m-menu > .hover { background: var(--m-accent); color: #fff; }
+.m-btn { margin-top: 3px; text-align: center; padding: 3px; border-radius: 3px; background: var(--m-accent); color: #fff; font-weight: 600; }
+.m-scroll { position: absolute; right: 2px; top: 40px; width: 4px; height: 50px; border-radius: 2px; background: var(--m-scrollbar); }
+@media (max-width: 860px) { .creator-layout { grid-template-columns: 1fr; } .creator-side { position: static; } }
 /* Embedded in Discord's own settings page: no window chrome, Discord shows the page title. */
 :host { display: block; }
 .backdrop.embedded { position: static; display: block; background: none; animation: none; z-index: auto; }

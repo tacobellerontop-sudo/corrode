@@ -4,7 +4,9 @@ import type { CorrodeNative, UpdateInfo, UpdateTarget } from "../native";
 import type { PluginManager } from "../plugins/manager";
 import type { PluginStatus, SettingDefinition } from "../plugins/types";
 import { PLUGIN_CATEGORIES } from "../builtins/categories";
-import type { ThemeManager } from "../themes";
+import { parseMeta, type Theme, type ThemeManager } from "../themes";
+import { newState, readState } from "../themeCreator";
+import { ThemeCreatorView, type CreatorSession } from "./themeCreatorView";
 import { clear, h, toggle } from "./dom";
 import { SETTINGS_CSS } from "./styles";
 import { showToast } from "./toast";
@@ -43,6 +45,11 @@ export class SettingsUI {
   private filter = "";
   private category = "";
   private collapsed = new Set<string>();
+  /** The theme creator's draft; kept when leaving the page so it can be picked up again. */
+  private creator?: CreatorSession;
+  private creatorView?: { view: ThemeCreatorView; el: HTMLElement };
+  private confirmDelete?: string;
+  private themesVisited = false;
   private pasteOpen = false;
   private pasteDraft = "";
   private lastFocus?: Element | null;
@@ -100,7 +107,7 @@ export class SettingsUI {
 
     document.body.appendChild(this.host);
     this.cleanups.push(this.deps.plugins.subscribe(() => this.tab === "plugins" && this.render()));
-    this.cleanups.push(this.deps.themes.subscribe(() => this.tab === "themes" && this.render()));
+    this.cleanups.push(this.deps.themes.subscribe(() => this.tab === "themes" && !this.creator && this.render()));
     this.render();
     (root.querySelector(`[data-tab="${this.tab}"]`) as HTMLElement | null)?.focus();
   }
@@ -125,7 +132,7 @@ export class SettingsUI {
     }
     container.appendChild(host);
     this.cleanups.push(this.deps.plugins.subscribe(() => this.tab === "plugins" && this.render()));
-    this.cleanups.push(this.deps.themes.subscribe(() => this.tab === "themes" && this.render()));
+    this.cleanups.push(this.deps.themes.subscribe(() => this.tab === "themes" && !this.creator && this.render()));
     this.render();
     return () => {
       if (this.host === host) this.close();
@@ -134,6 +141,8 @@ export class SettingsUI {
 
   close() {
     this.embedded = false;
+    this.dropCreatorView();
+    this.themesVisited = false;
     for (const c of this.cleanups.splice(0)) c();
     this.host?.remove();
     this.host = undefined;
@@ -146,7 +155,14 @@ export class SettingsUI {
     else this.open();
   }
 
+  /** Ends the creator's live preview; its draft stays for next time. */
+  private dropCreatorView() {
+    this.creatorView?.view.dispose();
+    this.creatorView = undefined;
+  }
+
   private switchTab(id: TabId) {
+    if (id !== "themes") this.dropCreatorView();
     this.tab = id;
     this.render();
   }
@@ -522,7 +538,22 @@ export class SettingsUI {
 
   private renderThemes() {
     const { themes } = this.deps;
-    const list = themes.list();
+    if (this.creator) {
+      this.creatorView ??= (() => {
+        const view = new ThemeCreatorView(themes, this.creator!, () => {
+          this.creator = undefined;
+          this.creatorView = undefined;
+          this.render();
+        });
+        return { view, el: view.render() };
+      })();
+      return this.creatorView.el;
+    }
+    if (!this.themesVisited) {
+      this.themesVisited = true;
+      void themes.refreshFolder();
+    }
+    const native = themes.native;
     const urlInput = h("input", { type: "url", placeholder: "Theme URL (https://…/theme.css)", "aria-label": "Theme URL" });
     const add = async () => {
       const url = urlInput.value.trim();
@@ -536,53 +567,136 @@ export class SettingsUI {
     };
     urlInput.addEventListener("keydown", (e) => e.key === "Enter" && add());
 
+    // "Add .css file": copies a file into the themes folder (or saved themes without one).
+    const fileInput = h("input", {
+      type: "file",
+      accept: ".css,text/css",
+      multiple: true,
+      style: "display:none",
+      onChange: async (e: Event) => {
+        const input = e.target as HTMLInputElement;
+        const files = [...(input.files ?? [])];
+        input.value = "";
+        for (const f of files) {
+          try {
+            const css = await f.text();
+            if (native) await themes.writeFile(f.name.replace(/[\/:*?"<>|]/g, "_").replace(/(\.css)?$/i, ".css"), css);
+            else themes.add(css, { name: parseMeta(css).name ?? f.name.replace(/(\.theme)?\.css$/i, "") });
+            showToast(`Added ${f.name}`, { kind: "success" });
+          } catch (err) {
+            showToast(String((err as Error)?.message ?? err), { kind: "error", title: `Couldn't add ${f.name}` });
+          }
+        }
+      },
+    });
+
+    const startCreator = (state = newState(), editing?: { id: string; file?: string }) => {
+      this.creator = { state, editing, live: true };
+      this.render();
+    };
+
+    const card = (t: Theme) => {
+      const made = readState(t.css);
+      const confirming = this.confirmDelete === t.id;
+      const meta = parseMeta(t.css);
+      return h(
+        "div",
+        { class: "card", "data-theme": t.id },
+        h(
+          "div",
+          { class: "card-head" },
+          h(
+            "div",
+            { class: "card-main" },
+            h("div", { class: "card-title" }, t.name, made && h("span", { class: "badge" }, "Made here"), meta.background && h("span", { class: "badge" }, "Background")),
+            t.file && h("div", { class: "card-desc" }, t.file),
+            t.url && h("div", { class: "card-desc" }, t.url),
+            meta.author && h("div", { class: "card-desc" }, `by ${meta.author}`),
+            h(
+              "div",
+              { class: "card-actions" },
+              made && h("button", { class: "btn small", onClick: () => startCreator(made, { id: t.id, file: t.file }) }, "Edit"),
+              t.url &&
+                h(
+                  "button",
+                  {
+                    class: "btn small secondary",
+                    onClick: () =>
+                      themes.refresh(t.id).then(
+                        () => showToast(`Refreshed ${t.name}`, { kind: "success" }),
+                        (err) => showToast(String(err?.message ?? err), { kind: "error" }),
+                      ),
+                  },
+                  "Refresh",
+                ),
+              confirming
+                ? [
+                    h(
+                      "button",
+                      {
+                        class: "btn small danger",
+                        onClick: async () => {
+                          this.confirmDelete = undefined;
+                          try {
+                            await themes.remove(t.id);
+                          } catch (err) {
+                            showToast(String((err as Error)?.message ?? err), { kind: "error" });
+                            this.render();
+                          }
+                        },
+                      },
+                      t.file ? "Delete the file" : "Remove",
+                    ),
+                    h("button", { class: "btn small secondary", onClick: () => ((this.confirmDelete = undefined), this.render()) }, "Keep"),
+                  ]
+                : h("button", { class: "btn small danger", onClick: () => ((this.confirmDelete = t.id), this.render()) }, t.file ? "Delete" : "Remove"),
+            ),
+          ),
+          toggle(t.enabled, (v) => themes.setEnabled(t.id, v), { label: `Enable ${t.name}` }),
+        ),
+      );
+    };
+
+    const folder = themes.listFolder();
+    const saved = themes.listSaved();
     return h(
       "section",
       null,
       h("h2", null, "Themes"),
-      h("p", { class: "lede" }, "CSS themes, loaded from a URL. BetterDiscord-style .theme.css files work if their CSS doesn't rely on BD-only features."),
-      h("div", { class: "toolbar" }, urlInput, h("button", { class: "btn", onClick: add }, "Add")),
-      list.length
-        ? h(
-            "div",
-            { class: "cards" },
-            list.map((t) =>
-              h(
-                "div",
-                { class: "card" },
-                h(
-                  "div",
-                  { class: "card-head" },
-                  h(
-                    "div",
-                    { class: "card-main" },
-                    h("div", { class: "card-title" }, t.name),
-                    t.url && h("div", { class: "card-desc" }, t.url),
-                    h(
-                      "div",
-                      { class: "card-actions" },
-                      t.url &&
-                        h(
-                          "button",
-                          {
-                            class: "btn small secondary",
-                            onClick: () =>
-                              themes.refresh(t.id).then(
-                                () => showToast(`Refreshed ${t.name}`, { kind: "success" }),
-                                (err) => showToast(String(err?.message ?? err), { kind: "error" }),
-                              ),
-                          },
-                          "Refresh",
-                        ),
-                      h("button", { class: "btn small danger", onClick: () => themes.remove(t.id) }, "Remove"),
-                    ),
-                  ),
-                  toggle(t.enabled, (v) => themes.setEnabled(t.id, v), { label: `Enable ${t.name}` }),
-                ),
-              ),
+      h("p", { class: "lede" }, "Change how Discord looks. Make your own with the theme creator, drop .css files into your themes folder, or add one from a link. BetterDiscord .theme.css files work if they don't rely on BetterDiscord-only features."),
+      h(
+        "div",
+        { class: "create-card" },
+        h("div", { class: "create-art" }, ["#5865f2", "#f0b232", "#2ecc71", "#e0457b"].map((c) => h("span", { style: `background:${c}` }))),
+        h("div", { class: "card-main" }, h("div", { class: "card-title" }, "Theme creator"), h("div", { class: "card-desc" }, "Pick colours for each part of Discord, add a background picture or video, preview it and save. No coding needed.")),
+        h("button", { class: "btn", "data-action": "create-theme", onClick: () => startCreator() }, "Create a theme"),
+      ),
+      fileInput,
+      native
+        ? [
+            h("h3", null, "Themes folder"),
+            h(
+              "p",
+              { class: "hint" },
+              "Put .css files in this folder and they appear here. Changes to a file show up within a few seconds.",
+              themes.folderPath && [" ", h("code", { class: "path" }, themes.folderPath)],
             ),
-          )
-        : h("div", { class: "empty" }, "No themes yet. Paste a theme URL above."),
+            h(
+              "div",
+              { class: "toolbar" },
+              native.openFolder && h("button", { class: "btn secondary", onClick: () => native.openFolder!().catch((err) => showToast(String(err?.message ?? err), { kind: "error" })) }, "Open themes folder"),
+              h("button", { class: "btn secondary", onClick: () => fileInput.click() }, "Add .css file"),
+              h("button", { class: "btn secondary", onClick: () => themes.refreshFolder().then(() => this.render()) }, "Reload"),
+            ),
+            themes.folderError && h("div", { class: "notice" }, `Couldn't read the themes folder: ${themes.folderError}`),
+            folder.length
+              ? h("div", { class: "cards" }, folder.map(card))
+              : h("div", { class: "empty" }, themes.folderReady ? "No .css files in the themes folder yet." : "Loading…"),
+            h("h3", null, "From a link"),
+          ]
+        : h("h3", null, "Your themes"),
+      h("div", { class: "toolbar" }, urlInput, h("button", { class: "btn", onClick: add }, "Add"), !native && h("button", { class: "btn secondary", onClick: () => fileInput.click() }, "Add .css file")),
+      saved.length ? h("div", { class: "cards" }, saved.map(card)) : h("div", { class: "empty" }, native ? "No themes from links." : "No themes yet. Create one, add a .css file or paste a theme link above."),
     );
   }
 

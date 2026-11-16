@@ -225,6 +225,103 @@ try {
     console.log(`✓ all ${started.total} built-in plugins start, work together and stop cleanly`);
     await page.close();
   }
+
+  // Plugin groups, the themes folder and the theme creator.
+  {
+    const page = await browser.newPage({ viewport: { width: 1280, height: 860 } });
+    const errors = [];
+    page.on("pageerror", (e) => errors.push(String(e)));
+    page.on("console", (m) => m.type() === "error" && errors.push(m.text()));
+    await page.goto(`${base}/test/harness/?mode=early`);
+    await page.waitForFunction(() => window.corrode);
+    await page.evaluate(() => window.corrode.ready);
+    const shot = async (name) => {
+      if (!process.env.SCREENSHOTS) return;
+      mkdirSync(join(root, "test/artifacts"), { recursive: true });
+      await page.screenshot({ path: join(root, `test/artifacts/${name}.png`) });
+    };
+    const ui = "corrode-settings";
+
+    // Plugins are shown in groups by what they do, with a chip per group.
+    await page.evaluate(() => window.corrode.ui.openSettings("plugins"));
+    const groups = await page.locator(`${ui} .group`).evaluateAll((els) => els.map((e) => e.dataset.group));
+    assert(groups.length === 10 && groups[0] === "Appearance" && groups.includes("Quality of Life"), `plugin groups: ${groups}`);
+    await shot("plugins-groups");
+    await page.locator(`${ui} .chip[data-category="Media"]`).click();
+    const media = await page.locator(`${ui} .card[data-plugin]`).count();
+    assert(media === 9, `Media group: ${media} plugins`);
+    await page.locator(`${ui} .group[data-group="Media"] .group-head`).click();
+    assert((await page.locator(`${ui} .card[data-plugin]`).count()) === 0, "group collapses");
+
+    // The Themes page lists the themes folder; folder themes start off.
+    await page.locator(`${ui} .tab[data-tab=themes]`).click();
+    const harness = page.locator(`${ui} .card[data-theme="file:Harness.theme.css"]`);
+    await harness.waitFor();
+    assert((await harness.locator(".card-title").textContent()).includes("Harness Theme"), "folder theme name from @name");
+    assert(!(await page.$('style[data-corrode="theme:file:Harness.theme.css"]')), "folder themes start off");
+    await harness.locator(".switch").click();
+    await page.waitForSelector('style[data-corrode="theme:file:Harness.theme.css"]', { state: "attached" });
+
+    // A file dropped into the folder shows up, and edits to an enabled one apply live.
+    await page.evaluate(() => {
+      window.__themeFiles.set("Dropped.css", { css: "/* plain */ body { --dropped: 1; }", modified: 500 });
+      window.__themeFiles.set("Harness.theme.css", { css: "/** @name Harness Theme */ .harness-theme { color: blue; }", modified: 501 });
+    });
+    await page.locator(`${ui} .card[data-theme="file:Dropped.css"]`).waitFor({ timeout: 8000 });
+    await page.waitForFunction(() => document.querySelector('style[data-corrode="theme:file:Harness.theme.css"]').textContent.includes("blue"), null, { timeout: 8000 });
+    await page.locator(`${ui} button:has-text('Open themes folder')`).click();
+    assert(await page.evaluate(() => window.__openedFolder), "open themes folder");
+    await shot("themes-page");
+
+    // The theme creator: pick colours, add a background picture, preview live, save to the folder.
+    await page.locator(`${ui} [data-action=create-theme]`).click();
+    await page.locator(`${ui} .creator`).waitFor();
+    await page.locator(`${ui} input[aria-label="Theme name"]`).fill("Ocean Test");
+    await page.locator(`${ui} input[type=color][data-part=chat]`).fill("#123456");
+    await page.locator(`${ui} input[type=color][data-part=accent]`).fill("#ff5500");
+    await page.waitForFunction(() => (document.querySelector('style[data-corrode="theme-preview"]')?.textContent ?? "").includes("--background-primary: #123456"), null, { timeout: 3000 });
+    const mockChat = await page.locator(`${ui} .mock`).evaluate((el) => el.style.getPropertyValue("--m-chat"));
+    assert(mockChat === "#123456", `preview colours: ${mockChat}`);
+    // A 1x1 PNG.
+    const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==", "base64");
+    await page.locator(`${ui} .creator input[type=file]`).setInputFiles({ name: "bg.png", mimeType: "image/png", buffer: png });
+    await page.waitForFunction(() => (document.querySelector("corrode-theme-bg")?.style.backgroundImage ?? "").includes("blob:"), null, { timeout: 5000 });
+    assert(await page.evaluate(() => window.__themeMedia.has("media/bg.png")), "background saved to the themes folder");
+    await page.locator(`${ui} input[aria-label="Panel opacity"]`).fill("50");
+    await page.waitForTimeout(300);
+    await shot("theme-creator");
+    await page.locator(`${ui} [data-action=save-theme]`).click();
+    await page.locator(`${ui} .card[data-theme="file:Ocean Test.theme.css"]`).waitFor();
+    const saved = await page.evaluate(() => window.__themeFiles.get("Ocean Test.theme.css")?.css ?? "");
+    for (const part of ["@name Ocean Test", "@background media/bg.png", "--background-primary: rgba(18, 52, 86, 0.5) !important", "--brand-experiment: #ff5500 !important", "@corrodeCreator "])
+      assert(saved.includes(part), `saved theme has ${JSON.stringify(part)}:\n${saved.slice(0, 600)}`);
+    const applied = await page.evaluate(() => ({
+      theme: !!document.querySelector('style[data-corrode="theme:file:Ocean Test.theme.css"]'),
+      preview: !!document.querySelector('style[data-corrode="theme-preview"]'),
+      bg: document.querySelectorAll("corrode-theme-bg").length,
+    }));
+    assert(applied.theme && !applied.preview && applied.bg === 1, `saved theme applied: ${JSON.stringify(applied)}`);
+
+    // It opens in the creator again with its colours.
+    await page.locator(`${ui} .card[data-theme="file:Ocean Test.theme.css"] button:has-text('Edit')`).click();
+    assert((await page.locator(`${ui} input[aria-label="Theme name"]`).inputValue()) === "Ocean Test", "edit keeps the name");
+    assert((await page.locator(`${ui} input[type=color][data-part=chat]`).inputValue()) === "#123456", "edit keeps the colours");
+    await page.locator(`${ui} .creator button:has-text('Cancel')`).click();
+
+    // Deleting asks first, then removes the file and the background.
+    const ocean = page.locator(`${ui} .card[data-theme="file:Ocean Test.theme.css"]`);
+    await ocean.locator("button:has-text('Delete')").click();
+    await ocean.locator("button:has-text('Delete the file')").click();
+    await ocean.waitFor({ state: "detached" });
+    await page.waitForFunction(() => !document.querySelector("corrode-theme-bg"));
+    assert(!(await page.evaluate(() => window.__themeFiles.has("Ocean Test.theme.css"))), "file deleted");
+
+    await page.evaluate(() => window.corrode.unload());
+    assert(!(await page.$("corrode-theme-bg, style[data-corrode]")), "unload removes themes");
+    assert(!errors.length, `page errors: ${errors.join("\n")}`);
+    console.log("✓ plugin groups, themes folder and theme creator");
+    await page.close();
+  }
 } catch (err) {
   failed = true;
   console.error("✗", err.message);

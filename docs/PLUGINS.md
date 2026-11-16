@@ -70,6 +70,7 @@ module.exports = corrode.definePlugin({
   description: "What it does, in one line.",
   authors: ["you"],
   version: "1.0.0",
+  category: "Quality of Life", // the group it shows in on the Plugins page (see below)
 
   settings: {                  // rendered automatically on the plugin's card
     loud: { type: "boolean", label: "Be loud", default: false },
@@ -96,6 +97,12 @@ module.exports = corrode.definePlugin({
 | `flux` | Reacting to events: messages, typing, presence, channel switches. See [Flux](#flux). |
 | `start(ctx)` | Everything else: patching Discord's functions, intercepting events, timers, DOM work. |
 | `settings` | Options the user can change. Add `description` for help text and `restartRequired: true` if a change only applies after a restart. |
+
+The Plugins page sorts plugins into groups by what they do: **Appearance**, **Declutter**,
+**Quality of Life**, **Chat**, **Media**, **Writing and Sending**, **Notifications**,
+**Filters and Muting**, **Privacy and Safety** and **Utilities**. Set `category` to one of these
+to join that group. Another name gets a group of its own; with no `category`, the plugin goes
+under **Installed by me**.
 
 ## Recipes
 
@@ -262,7 +269,8 @@ Built-in plugins ship inside Corrode and can be written in TypeScript with full 
    });
    ```
 
-2. Add it to the list in `src/builtins/index.ts`, in the group it belongs to.
+2. Add it to the list in `src/builtins/index.ts`, and its id to its group in
+   `src/builtins/categories.ts` (a test fails if a built-in has no group).
 3. `npm run check` (types, tests, build and the browser smoke test, which turns every built-in
    plugin on at once), then `node scripts/list-plugins.mjs` to refresh
    [BUILTIN_PLUGINS.md](BUILTIN_PLUGINS.md).

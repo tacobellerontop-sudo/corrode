@@ -98,6 +98,10 @@ Type definition: [`src/native.ts`](../src/native.ts).
 | `updates.check()` | Optional. Resolves to `{ client, corrode }`, each `{ version?, commit?, latestVersion?, latestCommit?, available, error? }`. When present, Corrode shows an "Updates" page and checks once at startup. |
 | `updates.updateCorrode()` | Optional. Download the latest Corrode build; it takes effect after `relaunch()`. Builds are published at `https://github.com/tacobellerontop-sudo/corrode/releases/download/latest-main/` (`manifest.json` lists the files and their SHA-256). |
 | `updates.updateClient()` | Optional. Download and start the client's own update, or open its download page. |
+| `themes.list()` | Optional: a themes folder. Resolves to `{ dir?, files: [{ file, modified, size? }] }` for the `.css` files in it. When present, the Themes page lists them (checked every 3 seconds; a changed `modified` makes Corrode read the file again) and the theme creator saves there. |
+| `themes.read(file)`, `themes.write(file, css)`, `themes.delete(file)` | Read, write and delete a `.css` file in the folder. `file` is a bare file name; reject anything else. |
+| `themes.openFolder()` | Optional. Opens the folder in the file manager. |
+| `themes.writeMedia(name, data)`, `themes.readMedia(path)` | Optional. Save a background picture or video (`data` is a Blob, ArrayBuffer or Uint8Array) and resolve to its path, `media/<name>`; read one back as an ArrayBuffer. Themes refer to it with `@background media/<name>`. |
 
 ## What Corrode exposes back
 

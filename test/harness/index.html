@@ -29,6 +29,31 @@
         }),
         updateCorrode: async () => void (window.__corrodeUpdated = true),
       },
+      // An in-memory themes folder, standing in for the client's.
+      themes: (() => {
+        const files = (window.__themeFiles = new Map([["Harness.theme.css", { css: "/** @name Harness Theme */ .harness-theme { color: red; }", modified: 1 }]]));
+        const media = (window.__themeMedia = new Map());
+        let clock = 10;
+        return {
+          list: async () => ({ dir: "/fake/themes", files: [...files].map(([file, f]) => ({ file, modified: f.modified, size: f.css.length })) }),
+          read: async (file) => {
+            if (!files.has(file)) throw new Error(`no ${file}`);
+            return files.get(file).css;
+          },
+          write: async (file, css) => void files.set(file, { css, modified: ++clock }),
+          delete: async (file) => void files.delete(file),
+          openFolder: async () => void (window.__openedFolder = true),
+          writeMedia: async (name, data) => {
+            const bytes = data instanceof Blob ? await data.arrayBuffer() : data;
+            media.set(`media/${name}`, bytes);
+            return `media/${name}`;
+          },
+          readMedia: async (path) => {
+            if (!media.has(path)) throw new Error(`no ${path}`);
+            return media.get(path);
+          },
+        };
+      })(),
     };
     if (new URLSearchParams(location.search).get("mode") !== "late") {
       document.write('<script src="/dist/corrode.js"><\/script>');
