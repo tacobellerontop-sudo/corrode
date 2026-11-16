@@ -58,6 +58,7 @@ export class ThemeManager {
   private folder = new Map<string, { modified: number; css: string }>();
   private folderLoaded = false;
   private poll?: ReturnType<typeof setInterval>;
+  private onVisibility?: () => void;
   private polling?: Promise<void>;
   private bg?: { el: HTMLElement; src: string; kind: BackgroundKind; url: string; revoke?: () => void };
   private bgSeq = 0;
@@ -125,7 +126,21 @@ export class ThemeManager {
     this.applyQuickCss();
     if (this.native) {
       void this.refreshFolder();
+      // Watch the folder only while Discord is on screen. Minimized or in the tray it would
+      // only wake the page up every few seconds for nothing; it catches up when shown again.
+      this.onVisibility = () => this.setPolling(document.visibilityState !== "hidden");
+      document.addEventListener("visibilitychange", this.onVisibility);
+      this.onVisibility();
+    }
+  }
+
+  private setPolling(on: boolean) {
+    if (on && !this.poll) {
+      void this.refreshFolder();
       this.poll = setInterval(() => void this.refreshFolder(), POLL_MS);
+    } else if (!on && this.poll) {
+      clearInterval(this.poll);
+      this.poll = undefined;
     }
   }
 
@@ -133,6 +148,8 @@ export class ThemeManager {
     this.started = false;
     clearInterval(this.poll);
     this.poll = undefined;
+    if (this.onVisibility) document.removeEventListener("visibilitychange", this.onVisibility);
+    this.onVisibility = undefined;
     for (const s of this.styles.values()) s.remove();
     this.styles.clear();
     this.quick?.remove();

@@ -207,19 +207,20 @@ export function installEntryPoints(ui: SettingsUI): () => void {
 
   const removeLayoutEntry = installLayoutEntry(ui);
 
-  let scheduled = false;
+  // Discord changes the page many times a second while chatting; look for the settings sidebar
+  // at most every 150 ms instead of on every frame.
+  let timer: ReturnType<typeof setTimeout> | undefined;
   const observer = new MutationObserver(() => {
-    if (scheduled) return;
-    scheduled = true;
-    requestAnimationFrame(() => {
-      scheduled = false;
+    if (timer !== undefined) return;
+    timer = setTimeout(() => {
+      timer = undefined;
       try {
         const list = findSidebar();
         if (list) inject(list, () => ui.open());
       } catch (err) {
         log.warn("Couldn't add the settings entry", err);
       }
-    });
+    }, 150);
   });
   if (document.body) observer.observe(document.body, { childList: true, subtree: true });
 
@@ -227,6 +228,7 @@ export function installEntryPoints(ui: SettingsUI): () => void {
     window.removeEventListener("keydown", onKey, true);
     removeLayoutEntry();
     observer.disconnect();
+    clearTimeout(timer);
     for (const el of document.querySelectorAll(`[${MARK}]`)) el.remove();
   };
 }
