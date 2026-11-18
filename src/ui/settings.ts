@@ -390,6 +390,9 @@ export class SettingsUI {
     ];
 
     const actions = [
+      ...(p.running ? (def.actions ?? []) : []).map((a, i) =>
+        h("button", { class: "btn small", onClick: () => plugins.runAction(p.id, i) }, a.label),
+      ),
       hasSettings &&
         h(
           "button",

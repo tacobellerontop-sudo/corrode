@@ -81,14 +81,14 @@ try {
       box.remove();
       return { ...out, removed: !document.querySelector("corrode-settings") };
     });
-    assert(embedded.cards === 200 && !embedded.close && !embedded.nav && embedded.removed, `embedded settings: ${JSON.stringify(embedded)}`);
+    assert(embedded.cards === 204 && !embedded.close && !embedded.nav && embedded.removed, `embedded settings: ${JSON.stringify(embedded)}`);
 
     // Sidebar entry injected into the fake settings sidebar, and it opens the window.
     await page.waitForSelector("[data-corrode-entry][role=tab]");
     await page.click("[data-corrode-entry][role=tab]");
     await page.waitForSelector("corrode-settings", { state: "attached" });
     const cards = await page.evaluate(() => document.querySelector("corrode-settings").shadowRoot.querySelectorAll(".card").length);
-    assert(cards === 200, `plugin cards: ${cards}`);
+    assert(cards === 204, `plugin cards: ${cards}`);
 
     // Expand a plugin's settings.
     await page.locator("corrode-settings .card[data-plugin=hideClutter] button:has-text('Settings')").click();
@@ -212,6 +212,17 @@ try {
     assert(events.seen.join() === "200,deleted 101", `filters: bot message hidden, others' deletions kept, own deletion passes: ${events.seen}`);
     for (const part of ["psst", "Ghost ping from Ana", "Ana joined", "Ana is online"]) assert(events.toasts.includes(part), `notice ${JSON.stringify(part)} in: ${events.toasts}`);
 
+    // Message Logger marked the kept deletion, and its log window lists it.
+    await page.waitForSelector("#chat-messages-10-103[data-corrode-deleted] .corrode-ml-tag");
+    const log = await page.evaluate(() => {
+      const { plugins } = window.corrode;
+      plugins.runAction("messageLogger", 0);
+      const text = document.querySelector(".corrode-dlg")?.textContent ?? "";
+      document.querySelector(".corrode-dlg-x").click();
+      return { text, closed: !document.querySelector(".corrode-dlg") };
+    });
+    assert(log.text.includes("Message log") && log.text.includes("hey <@1>") && log.closed, `message log window: ${JSON.stringify(log)}`);
+
     // Turning everything off leaves nothing behind.
     const after = await page.evaluate(() => {
       const { plugins } = window.corrode;
@@ -245,7 +256,7 @@ try {
     // Plugins are shown in groups by what they do, with a chip per group.
     await page.evaluate(() => window.corrode.ui.openSettings("plugins"));
     const groups = await page.locator(`${ui} .group`).evaluateAll((els) => els.map((e) => e.dataset.group));
-    assert(groups.length === 10 && groups[0] === "Appearance" && groups.includes("Quality of Life"), `plugin groups: ${groups}`);
+    assert(groups.length === 11 && groups[0] === "Power Plugins" && groups.includes("Quality of Life"), `plugin groups: ${groups}`);
     await shot("plugins-groups");
     await page.locator(`${ui} .chip[data-category="Media"]`).click();
     const media = await page.locator(`${ui} .card[data-plugin]`).count();

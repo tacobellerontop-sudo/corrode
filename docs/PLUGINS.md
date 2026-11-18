@@ -88,6 +88,10 @@ module.exports = corrode.definePlugin({
   async start(ctx) { /* set things up */ },
   stop(ctx) { /* optional: undo anything Corrode can't undo for you */ },
   onSettingChange(key, value, ctx) { /* optional */ },
+
+  actions: [                   // buttons on the plugin's card while it runs
+    { label: "Say hi", run(ctx) { ctx.toast("Hi!"); } },
+  ],
 });
 ```
 
@@ -97,8 +101,9 @@ module.exports = corrode.definePlugin({
 | `flux` | Reacting to events: messages, typing, presence, channel switches. See [Flux](#flux). |
 | `start(ctx)` | Everything else: patching Discord's functions, intercepting events, timers, DOM work. |
 | `settings` | Options the user can change. Add `description` for help text and `restartRequired: true` if a change only applies after a restart. |
+| `actions` | Buttons on the plugin's card, shown while it's on, for things like "Open log". `run(ctx)` gets the running plugin's context. |
 
-The Plugins page sorts plugins into groups by what they do: **Appearance**, **Declutter**,
+The Plugins page sorts plugins into groups by what they do: **Power Plugins**, **Appearance**, **Declutter**,
 **Quality of Life**, **Chat**, **Media**, **Writing and Sending**, **Notifications**,
 **Filters and Muting**, **Privacy and Safety** and **Utilities**. Set `category` to one of these
 to join that group. Another name gets a group of its own; with no `category`, the plugin goes
@@ -227,7 +232,8 @@ ctx.flux.subscribe("CHANNEL_SELECT", (action) => { ... });
 ctx.flux.intercept((action) => action.type === "TYPING_START"); // return true to block
 ```
 
-Interceptors run before Discord's stores see the action and may mutate it.
+Interceptors run before Discord's stores see the action and may mutate it. Every interceptor sees
+every action, even one that another plugin blocks.
 
 ## Source patches
 

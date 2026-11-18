@@ -89,8 +89,18 @@ export interface PluginDefinition<S extends SettingsSchema = SettingsSchema> {
   start?(ctx: PluginContext<S>): void | Promise<void>;
   stop?(ctx: PluginContext<S>): void;
   onSettingChange?(key: keyof S & string, value: unknown, ctx: PluginContext<S>): void;
+  /**
+   * Buttons shown on the plugin's card while it is running, e.g. "Open log". `run` gets the
+   * running plugin's context.
+   */
+  actions?: PluginAction<S>[];
   /** Free for plugins to stash things on (reachable from patches through `$self`). */
   [extra: string]: unknown;
+}
+
+export interface PluginAction<S extends SettingsSchema = SettingsSchema> {
+  label: string;
+  run(ctx: PluginContext<S>): void;
 }
 
 export type PluginSource = "builtin" | "external";

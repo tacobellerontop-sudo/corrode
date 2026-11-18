@@ -290,6 +290,18 @@ export class PluginManager {
     this.emit();
   }
 
+  /** Runs one of a running plugin's card buttons (`actions`). */
+  runAction(id: string, index: number) {
+    const e = this.entries.get(id);
+    const action = e?.def.actions?.[index];
+    if (!e?.running || !e.ctx || !action) return;
+    try {
+      action.run(e.ctx);
+    } catch (err) {
+      log.child(e.def.name).error(`Action "${action.label}" threw`, err);
+    }
+  }
+
   stop(id: string) {
     const e = this.entries.get(id);
     if (!e?.running) return;

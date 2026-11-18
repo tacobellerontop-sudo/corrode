@@ -52,13 +52,17 @@ function installInterceptorHook(d: FluxDispatcher) {
     (args, original) => {
       const action = args[0] as FluxAction;
       if (action && typeof action === "object") {
+        // Every interceptor sees every action, even one an earlier interceptor blocks, so
+        // plugins that only watch (e.g. a deletion notice) still work next to ones that block.
+        let blocked = false;
         for (const i of [...interceptors]) {
           try {
-            if (i(action) === true) return Promise.resolve();
+            if (i(action) === true) blocked = true;
           } catch (err) {
             log.error(`Interceptor threw on ${action.type}`, err);
           }
         }
+        if (blocked) return Promise.resolve();
       }
       return original(...args);
     },

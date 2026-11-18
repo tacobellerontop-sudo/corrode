@@ -6,8 +6,8 @@ import * as send from "../src/builtins/sending";
 import { findScamHost, isTrackingUrl, parseReminder, suspiciousHost } from "../src/builtins/utility";
 
 describe("built-in plugin list", () => {
-  it("has 200 plugins with unique ids and complete metadata", () => {
-    expect(builtinPlugins.length).toBe(200);
+  it("has 204 plugins with unique ids and complete metadata", () => {
+    expect(builtinPlugins.length).toBe(204);
     const ids = builtinPlugins.map((p) => p.id);
     expect(new Set(ids).size).toBe(ids.length);
     const names = builtinPlugins.map((p) => p.name);

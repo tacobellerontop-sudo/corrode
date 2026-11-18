@@ -41,8 +41,10 @@ modules and a settings sidebar. To try it in Discord without an injector, paste
 
 ## Built-in plugins
 
-Corrode ships with 200 plugins in five groups: appearance, sending, notices and filters, chat and
-media, and tools and privacy. All are off until you turn them on in **User Settings > Corrode >
+Corrode ships with 204 plugins. Four bigger "Power Plugins" hook deep into Discord: **Message
+Logger** (keeps deleted messages and edit history, with a searchable log), **Folder Sidebar**
+(server folders open in their own column), **Hidden Channels** and **Permission Viewer**. The other
+200 cover appearance, sending, notices and filters, chat and media, and tools and privacy. All are off until you turn them on in **User Settings > Corrode >
 Plugins**. [docs/BUILTIN_PLUGINS.md](docs/BUILTIN_PLUGINS.md) lists every one.
 
 To make your own, read [docs/PLUGINS.md](docs/PLUGINS.md): it walks through writing a plugin and

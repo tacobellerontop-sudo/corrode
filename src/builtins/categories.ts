@@ -4,6 +4,7 @@
  * installed by the user can set `category` to one of these names to join a group.
  */
 export const PLUGIN_CATEGORIES = [
+  { name: "Power Plugins", description: "Bigger plugins that hook deep into Discord: message logging, folders, hidden channels, permissions." },
   { name: "Appearance", description: "Colours, fonts, sizes and layout." },
   { name: "Declutter", description: "Hide buttons, badges and parts of Discord you don't use." },
   { name: "Quality of Life", description: "Shortcuts and small conveniences." },
@@ -19,6 +20,7 @@ export const PLUGIN_CATEGORIES = [
 export type PluginCategory = (typeof PLUGIN_CATEGORIES)[number]["name"];
 
 const groups: Record<PluginCategory, string[]> = {
+  "Power Plugins": ["messageLogger", "folderSidebar", "hiddenChannels", "permissionViewer"],
   Appearance: [
     "customFont", "chatFontSize", "lineSpacing", "messageSpacing", "emojiSize", "underlineLinks", "plainUsernames", "boldUsernames",
     "selectionColor", "wrapCodeBlocks", "codeBlockHeight", "codeFontSize", "roundMedia", "chatWidth", "sidebarWidth", "memberListWidth",
